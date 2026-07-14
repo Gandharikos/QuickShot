@@ -81,6 +81,7 @@ void QDrawWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void QDrawWidget::wheelEvent(QWheelEvent* event) {
+  // y() is vertical wheel rotation; x() carries horizontal input from tilt wheels or touchpads.
   const int angleDelta = event->angleDelta().y();
   if (image_.isNull() || !event->modifiers().testFlag(Qt::ControlModifier) || angleDelta == 0) {
     QAbstractScrollArea::wheelEvent(event);
@@ -88,10 +89,15 @@ void QDrawWidget::wheelEvent(QWheelEvent* event) {
   }
 
   const qreal previousZoom = zoomFactor_;
+  // Qt reports angleDelta in eighths of a degree, so a typical 15-degree notch is 120 units;
+  // keeping a fractional step also supports high-resolution wheels.
   const qreal wheelSteps = static_cast<qreal>(angleDelta) / wheelStepAngle;
+  // Multiplication gives every notch the same relative visual change, while clamp keeps the
+  // resulting scale within the supported 10%-800% range.
   zoomFactor_ =
       std::clamp(previousZoom * std::pow(zoomPerWheelStep, wheelSteps), minimumZoom, maximumZoom);
 
+  // Compare floating-point values approximately; clamp can leave the scale unchanged at a limit.
   if (qFuzzyCompare(zoomFactor_, previousZoom)) {
     event->accept();
     return;
