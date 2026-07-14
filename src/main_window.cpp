@@ -3,6 +3,7 @@
 #include "quickshot/qdrawwidget.hpp"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QFileDialog>
 #include <QIcon>
 #include <QImageReader>
@@ -70,13 +71,33 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   rotateLeftAction->setEnabled(false);
   rotateRightAction->setEnabled(false);
 
+  toolbar->addSeparator();
+  auto* shapeActions = new QActionGroup(toolbar);
+  shapeActions->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
+  auto* rectangleAction = toolbar->addAction(tr("Rectangle"));
+  auto* ellipseAction = toolbar->addAction(tr("Ellipse"));
+  rectangleAction->setObjectName("rectangleAction");
+  ellipseAction->setObjectName("ellipseAction");
+  rectangleAction->setCheckable(true);
+  ellipseAction->setCheckable(true);
+  rectangleAction->setEnabled(false);
+  ellipseAction->setEnabled(false);
+  shapeActions->addAction(rectangleAction);
+  shapeActions->addAction(ellipseAction);
+
   connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
   connect(rotateLeftAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateLeft);
   connect(rotateRightAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateRight);
+  connect(rectangleAction, &QAction::triggered, drawWidget_,
+          &QDrawWidget::setRectangleCreationMode);
+  connect(ellipseAction, &QAction::triggered, drawWidget_, &QDrawWidget::setEllipseCreationMode);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateLeftAction,
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateRightAction,
           &QAction::setEnabled);
+  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rectangleAction,
+          &QAction::setEnabled);
+  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, ellipseAction, &QAction::setEnabled);
 
   setCentralWidget(drawWidget_);
 }

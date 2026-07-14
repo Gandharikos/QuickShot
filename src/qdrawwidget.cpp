@@ -1,8 +1,16 @@
 #include "quickshot/qdrawwidget.hpp"
 
+#include "quickshot/ellipse.hpp"
+#include "quickshot/rectangle.hpp"
+#include "quickshot/shape.hpp"
+
+#include <QBrush>
+#include <QColor>
 #include <QFrame>
 #include <QImageReader>
+#include <QMouseEvent>
 #include <QPainter>
+#include <QPen>
 #include <QPointF>
 #include <QRectF>
 #include <QResizeEvent>
@@ -22,13 +30,18 @@ constexpr qreal minimumZoom = 0.1;
 constexpr qreal maximumZoom = 8.0;
 constexpr qreal zoomPerWheelStep = 1.1;
 constexpr qreal wheelStepAngle = 120.0;
+constexpr qreal handleSize = 8.0;
+constexpr qreal minimumShapeSize = 1.0;
 
 } // namespace
 
 QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent) {
   setFrameShape(QFrame::NoFrame);
   viewport()->setAutoFillBackground(false);
+  viewport()->setMouseTracking(true);
 }
+
+QDrawWidget::~QDrawWidget() = default;
 
 bool QDrawWidget::loadImage(const QString& fileName) {
   QImageReader reader(fileName);
@@ -40,6 +53,10 @@ bool QDrawWidget::loadImage(const QString& fileName) {
   }
 
   image_ = std::move(image);
+  shapes_.clear();
+  selectedShape_ = nullptr;
+  dragMode_ = DragMode::None;
+  activeHandle_.reset();
   zoomFactor_ = 1.0;
   horizontalScrollBar()->setValue(0);
   verticalScrollBar()->setValue(0);
@@ -55,9 +72,119 @@ qreal QDrawWidget::zoomFactor() const noexcept { return zoomFactor_; }
 
 QSize QDrawWidget::sizeHint() const { return {640, 360}; }
 
+qsizetype QDrawWidget::shapeCount() const noexcept {
+  return static_cast<qsizetype>(shapes_.size());
+}
+
+const ::quickshot::Shape* QDrawWidget::shapeAt(qsizetype index) const {
+  if (index < 0) {
+    return nullptr;
+  }
+
+  const auto position = static_cast<std::size_t>(index);
+  return position < shapes_.size() ? shapes_[position].get() : nullptr;
+}
+
+void QDrawWidget::setRectangleCreationMode(bool enabled) {
+  setCreationMode(CreationMode::Rectangle, enabled);
+}
+
+void QDrawWidget::setEllipseCreationMode(bool enabled) {
+  setCreationMode(CreationMode::Ellipse, enabled);
+}
+
 void QDrawWidget::rotateLeft() { rotateImage(-90.0); }
 
 void QDrawWidget::rotateRight() { rotateImage(90.0); }
+
+void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
+  const QPointF point = imagePosition(event->position());
+  if (dragMode_ != DragMode::None) {
+    updateDraggedShape(point);
+    viewport()->update();
+    event->accept();
+    return;
+  }
+
+  updateHoverCursor(point);
+  QAbstractScrollArea::mouseMoveEvent(event);
+}
+
+void QDrawWidget::mousePressEvent(QMouseEvent* event) {
+  if (event->button() != Qt::LeftButton || image_.isNull()) {
+    QAbstractScrollArea::mousePressEvent(event);
+    return;
+  }
+
+  const QPointF point = imagePosition(event->position());
+  if (!imageBounds().contains(point)) {
+    QAbstractScrollArea::mousePressEvent(event);
+    return;
+  }
+
+  if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
+    dragMode_ = DragMode::Resize;
+    activeHandle_ = handle;
+    dragStart_ = point;
+    dragStartBounds_ = selectedShape_->boundingRect();
+    event->accept();
+    return;
+  }
+
+  if (::quickshot::Shape* hitShape = shapeAt(point); hitShape != nullptr) {
+    selectedShape_ = hitShape;
+    dragMode_ = DragMode::Move;
+    dragStart_ = point;
+    dragStartBounds_ = selectedShape_->boundingRect();
+    viewport()->update();
+    event->accept();
+    return;
+  }
+
+  if (creationMode_ != CreationMode::None) {
+    std::unique_ptr<::quickshot::Shape> shape;
+    const QRectF initialBounds{point, point};
+    if (creationMode_ == CreationMode::Rectangle) {
+      shape = std::make_unique<Rectangle>(initialBounds);
+    } else {
+      shape = std::make_unique<Ellipse>(initialBounds);
+    }
+
+    selectedShape_ = shape.get();
+    shapes_.push_back(std::move(shape));
+    dragMode_ = DragMode::Create;
+    dragStart_ = point;
+    dragStartBounds_ = initialBounds;
+    viewport()->update();
+    event->accept();
+    return;
+  }
+
+  selectedShape_ = nullptr;
+  viewport()->update();
+  event->accept();
+}
+
+void QDrawWidget::mouseReleaseEvent(QMouseEvent* event) {
+  if (event->button() != Qt::LeftButton || dragMode_ == DragMode::None) {
+    QAbstractScrollArea::mouseReleaseEvent(event);
+    return;
+  }
+
+  if (dragMode_ == DragMode::Create && selectedShape_ != nullptr) {
+    const QRectF bounds = selectedShape_->boundingRect();
+    if (bounds.width() < minimumShapeSize || bounds.height() < minimumShapeSize) {
+      shapes_.pop_back();
+      selectedShape_ = nullptr;
+    }
+  }
+
+  dragMode_ = DragMode::None;
+  activeHandle_.reset();
+  updateHoverCursor(imagePosition(event->position()));
+  viewport()->update();
+  event->accept();
+}
 
 void QDrawWidget::paintEvent(QPaintEvent* event) {
   QAbstractScrollArea::paintEvent(event);
@@ -78,6 +205,12 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
   painter.translate(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
   painter.scale(zoomFactor_, zoomFactor_);
   painter.drawImage(QPointF{0.0, 0.0}, image_);
+
+  painter.setRenderHint(QPainter::Antialiasing);
+  for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+    shape->draw(painter);
+  }
+  drawSelectionHandles(painter);
 }
 
 void QDrawWidget::resizeEvent(QResizeEvent* event) {
@@ -115,6 +248,151 @@ void QDrawWidget::wheelEvent(QWheelEvent* event) {
   event->accept();
 }
 
+QPointF QDrawWidget::imagePosition(const QPointF& viewportPosition) const {
+  return {(viewportPosition.x() + static_cast<qreal>(horizontalScrollBar()->value())) / zoomFactor_,
+          (viewportPosition.y() + static_cast<qreal>(verticalScrollBar()->value())) / zoomFactor_};
+}
+
+QRectF QDrawWidget::imageBounds() const {
+  return {0.0, 0.0, static_cast<qreal>(image_.width()), static_cast<qreal>(image_.height())};
+}
+
+::quickshot::Shape* QDrawWidget::shapeAt(const QPointF& point) const {
+  for (auto shape = shapes_.rbegin(); shape != shapes_.rend(); ++shape) {
+    if ((*shape)->contains(point)) {
+      return shape->get();
+    }
+  }
+  return nullptr;
+}
+
+std::optional<HandlePosition> QDrawWidget::handleAt(const QPointF& point) const {
+  if (selectedShape_ == nullptr) {
+    return std::nullopt;
+  }
+
+  const qreal imageHandleSize = handleSize / zoomFactor_;
+  for (const SizeHandle& handle : selectedShape_->handles()) {
+    if (handle.hitRect(selectedShape_->boundingRect(), imageHandleSize).contains(point)) {
+      return handle.position();
+    }
+  }
+  return std::nullopt;
+}
+
+QRectF QDrawWidget::constrainedMove(const QRectF& bounds, const QPointF& offset) const {
+  const QRectF limits = imageBounds();
+  const qreal horizontalOffset =
+      std::clamp(offset.x(), limits.left() - bounds.left(), limits.right() - bounds.right());
+  const qreal verticalOffset =
+      std::clamp(offset.y(), limits.top() - bounds.top(), limits.bottom() - bounds.bottom());
+  return bounds.translated(horizontalOffset, verticalOffset);
+}
+
+QRectF QDrawWidget::resizedBounds(const QRectF& bounds, HandlePosition handle,
+                                  const QPointF& point) const {
+  const QRectF limits = imageBounds();
+  qreal left = bounds.left();
+  qreal top = bounds.top();
+  qreal right = bounds.right();
+  qreal bottom = bounds.bottom();
+
+  switch (handle) {
+  case HandlePosition::TopLeft:
+  case HandlePosition::Left:
+  case HandlePosition::BottomLeft:
+    left = std::clamp(point.x(), limits.left(), right - minimumShapeSize);
+    break;
+  case HandlePosition::TopRight:
+  case HandlePosition::Right:
+  case HandlePosition::BottomRight:
+    right = std::clamp(point.x(), left + minimumShapeSize, limits.right());
+    break;
+  case HandlePosition::Top:
+  case HandlePosition::Bottom:
+    break;
+  }
+
+  switch (handle) {
+  case HandlePosition::TopLeft:
+  case HandlePosition::Top:
+  case HandlePosition::TopRight:
+    top = std::clamp(point.y(), limits.top(), bottom - minimumShapeSize);
+    break;
+  case HandlePosition::BottomRight:
+  case HandlePosition::Bottom:
+  case HandlePosition::BottomLeft:
+    bottom = std::clamp(point.y(), top + minimumShapeSize, limits.bottom());
+    break;
+  case HandlePosition::Right:
+  case HandlePosition::Left:
+    break;
+  }
+
+  return {QPointF{left, top}, QPointF{right, bottom}};
+}
+
+void QDrawWidget::updateHoverCursor(const QPointF& point) {
+  if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
+    viewport()->setCursor(SizeHandle{*handle}.cursorShape());
+    return;
+  }
+
+  if (shapeAt(point) != nullptr ||
+      (creationMode_ != CreationMode::None && imageBounds().contains(point))) {
+    viewport()->setCursor(Qt::CrossCursor);
+    return;
+  }
+
+  viewport()->setCursor(Qt::ArrowCursor);
+}
+
+void QDrawWidget::updateDraggedShape(const QPointF& point) {
+  if (selectedShape_ == nullptr) {
+    return;
+  }
+
+  if (dragMode_ == DragMode::Create) {
+    const QPointF boundedPoint{std::clamp(point.x(), imageBounds().left(), imageBounds().right()),
+                               std::clamp(point.y(), imageBounds().top(), imageBounds().bottom())};
+    selectedShape_->setBoundingRect(QRectF{dragStart_, boundedPoint}.normalized());
+    return;
+  }
+
+  if (dragMode_ == DragMode::Move) {
+    selectedShape_->setBoundingRect(constrainedMove(dragStartBounds_, point - dragStart_));
+    return;
+  }
+
+  if (dragMode_ == DragMode::Resize && activeHandle_.has_value()) {
+    selectedShape_->setBoundingRect(resizedBounds(dragStartBounds_, *activeHandle_, point));
+  }
+}
+
+void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
+  if (selectedShape_ == nullptr) {
+    return;
+  }
+
+  const qreal imageHandleSize = handleSize / zoomFactor_;
+  QPen handlePen{Qt::black};
+  handlePen.setCosmetic(true);
+  painter.save();
+  painter.setPen(handlePen);
+  painter.setBrush(QBrush{Qt::white});
+  for (const SizeHandle& handle : selectedShape_->handles()) {
+    painter.drawRect(handle.hitRect(selectedShape_->boundingRect(), imageHandleSize));
+  }
+  painter.restore();
+}
+
+void QDrawWidget::setCreationMode(CreationMode mode, bool enabled) {
+  creationMode_ = enabled ? mode : CreationMode::None;
+  if (!enabled) {
+    viewport()->setCursor(Qt::ArrowCursor);
+  }
+}
+
 void QDrawWidget::rotateImage(qreal degrees) {
   if (image_.isNull()) {
     return;
@@ -122,7 +400,12 @@ void QDrawWidget::rotateImage(qreal degrees) {
 
   QTransform rotation;
   rotation.rotate(degrees);
+  const QTransform shapeTransformation =
+      QImage::trueMatrix(rotation, image_.width(), image_.height());
   image_ = image_.transformed(rotation);
+  for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+    shape->transform(shapeTransformation);
+  }
   updateScrollBars();
   viewport()->update();
 }
