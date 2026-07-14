@@ -7,9 +7,13 @@ namespace quickshot {
 
 Rectangle::Rectangle(const QRectF& bounds) : bounds_(bounds.normalized()) {}
 
-std::unique_ptr<Shape> Rectangle::clone() const { return std::make_unique<Rectangle>(bounds_); }
+std::unique_ptr<Shape> Rectangle::clone() const {
+  auto rectangle = std::make_unique<Rectangle>(bounds_);
+  rectangle->setRotationDegrees(rotationDegrees());
+  return rectangle;
+}
 
-void Rectangle::draw(QPainter& painter) const { painter.drawRect(bounds_); }
+void Rectangle::draw(QPainter& painter) const { painter.drawPath(path()); }
 
 QRectF Rectangle::boundingRect() const { return bounds_; }
 
@@ -18,7 +22,7 @@ void Rectangle::setBoundingRect(const QRectF& bounds) { bounds_ = bounds.normali
 QPainterPath Rectangle::path() const {
   QPainterPath shapePath;
   shapePath.addRect(bounds_);
-  return shapePath;
+  return mapPathToImage(shapePath);
 }
 
 std::span<const SizeHandle> Rectangle::handles() const noexcept { return handles_; }

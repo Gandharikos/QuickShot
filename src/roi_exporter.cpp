@@ -13,7 +13,7 @@
 namespace quickshot {
 
 QImage extractRoi(const QImage& image, const Shape& shape) {
-  const QRect pixelBounds = shape.boundingRect().toAlignedRect().intersected(image.rect());
+  const QRect pixelBounds = shape.path().boundingRect().toAlignedRect().intersected(image.rect());
   if (image.isNull() || pixelBounds.isEmpty()) {
     return {};
   }

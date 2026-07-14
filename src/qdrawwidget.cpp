@@ -6,19 +6,24 @@
 #include "quickshot/shape.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QBrush>
 #include <QColor>
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QDir>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
 #include <QImageReader>
+#include <QKeyEvent>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
+#include <QPixmap>
 #include <QPointF>
 #include <QRectF>
 #include <QResizeEvent>
@@ -26,6 +31,7 @@
 #include <QSettings>
 #include <QSize>
 #include <QStandardPaths>
+#include <QSvgRenderer>
 #include <QTransform>
 #include <QWheelEvent>
 #include <QtMath>
@@ -45,6 +51,55 @@ constexpr qreal wheelStepAngle = 120.0;
 constexpr qreal handleSize = 8.0;
 constexpr qreal minimumShapeSize = 1.0;
 constexpr qreal cloneOffset = 10.0;
+const QColor rotationHandleColor{0, 200, 83};
+
+QTransform rotationTransform(const QRectF& bounds, qreal degrees) {
+  const QPointF center = bounds.center();
+  QTransform transformation;
+  transformation.translate(center.x(), center.y());
+  transformation.rotate(degrees);
+  transformation.translate(-center.x(), -center.y());
+  return transformation;
+}
+
+HandlePosition oppositeHandle(HandlePosition position) {
+  switch (position) {
+  case HandlePosition::TopLeft:
+    return HandlePosition::BottomRight;
+  case HandlePosition::Top:
+    return HandlePosition::Bottom;
+  case HandlePosition::TopRight:
+    return HandlePosition::BottomLeft;
+  case HandlePosition::Right:
+    return HandlePosition::Left;
+  case HandlePosition::BottomRight:
+    return HandlePosition::TopLeft;
+  case HandlePosition::Bottom:
+    return HandlePosition::Top;
+  case HandlePosition::BottomLeft:
+    return HandlePosition::TopRight;
+  case HandlePosition::Left:
+    return HandlePosition::Right;
+  }
+
+  return HandlePosition::BottomRight;
+}
+
+qreal mouseAngle(const QPointF& center, const QPointF& point) {
+  return qRadiansToDegrees(std::atan2(point.y() - center.y(), point.x() - center.x()));
+}
+
+QCursor rotationCursor() {
+  static const QCursor cursor = []() {
+    QPixmap cursorPixmap{32, 32};
+    cursorPixmap.fill(Qt::transparent);
+    QSvgRenderer renderer{QStringLiteral(":/quickshot/icons/rotate-cursor.svg")};
+    QPainter painter{&cursorPixmap};
+    renderer.render(&painter);
+    return QCursor{cursorPixmap, 16, 16};
+  }();
+  return cursor;
+}
 
 QString pngFileName(const QString& selectedFileName) {
   const QFileInfo selectedFile{selectedFileName};
@@ -69,8 +124,10 @@ QString numberedPngFileName(const QString& baseFileName, std::size_t index) {
 
 QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent) {
   setFrameShape(QFrame::NoFrame);
+  setFocusPolicy(Qt::StrongFocus);
   viewport()->setAutoFillBackground(false);
   viewport()->setMouseTracking(true);
+  qApp->installEventFilter(this);
 
   QSettings settings;
   lastSaveDirectory_ = settings.value(QStringLiteral("roi/lastSaveDirectory")).toString();
@@ -82,7 +139,11 @@ QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent) {
   }
 }
 
-QDrawWidget::~QDrawWidget() = default;
+QDrawWidget::~QDrawWidget() {
+  if (qApp != nullptr) {
+    qApp->removeEventFilter(this);
+  }
+}
 
 bool QDrawWidget::loadImage(const QString& fileName) {
   QImageReader reader(fileName);
@@ -155,6 +216,12 @@ void QDrawWidget::rotateLeft() { rotateImage(-90.0); }
 void QDrawWidget::rotateRight() { rotateImage(90.0); }
 
 void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
+  if (suppressContextMenu_) {
+    suppressContextMenu_ = false;
+    event->accept();
+    return;
+  }
+
   const QPointF point = imagePosition(event->pos());
   ::quickshot::Shape* targetShape = shapeAt(point);
 
@@ -202,6 +269,25 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
   event->accept();
 }
 
+bool QDrawWidget::eventFilter(QObject* watched, QEvent* event) {
+  if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+    const auto* keyEvent = static_cast<QKeyEvent*>(event);
+    if (keyEvent->key() == Qt::Key_Alt && !keyEvent->isAutoRepeat()) {
+      setRotationMode(event->type() == QEvent::KeyPress);
+    }
+  } else if (event->type() == QEvent::ApplicationDeactivate) {
+    setRotationMode(false);
+    if (dragMode_ == DragMode::Rotate) {
+      dragMode_ = DragMode::None;
+      activeHandle_.reset();
+      suppressContextMenu_ = false;
+      viewport()->update();
+    }
+  }
+
+  return QAbstractScrollArea::eventFilter(watched, event);
+}
+
 void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
   if (dragMode_ != DragMode::None) {
@@ -216,12 +302,38 @@ void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void QDrawWidget::mousePressEvent(QMouseEvent* event) {
-  if (event->button() != Qt::LeftButton || image_.isNull()) {
+  if (image_.isNull()) {
     QAbstractScrollArea::mousePressEvent(event);
     return;
   }
 
   const QPointF point = imagePosition(event->position());
+  if (event->button() == Qt::RightButton &&
+      (rotationMode_ || event->modifiers().testFlag(Qt::AltModifier))) {
+    setRotationMode(true);
+    if (::quickshot::Shape* rotationShape = shapeAtRotationHandle(point);
+        rotationShape != nullptr) {
+      selectedShape_ = rotationShape;
+      dragMode_ = DragMode::Rotate;
+      activeHandle_ = HandlePosition::TopLeft;
+      dragStartRotation_ = rotationShape->rotationDegrees();
+      dragStartMouseAngle_ = mouseAngle(rotationShape->boundingRect().center(), point);
+      suppressContextMenu_ = true;
+      viewport()->setCursor(rotationCursor());
+      viewport()->update();
+      event->accept();
+      return;
+    }
+  }
+
+  if (event->button() != Qt::LeftButton) {
+    if (event->button() == Qt::RightButton) {
+      suppressContextMenu_ = false;
+    }
+    QAbstractScrollArea::mousePressEvent(event);
+    return;
+  }
+
   if (!imageBounds().contains(point)) {
     QAbstractScrollArea::mousePressEvent(event);
     return;
@@ -232,6 +344,9 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
     activeHandle_ = handle;
     dragStart_ = point;
     dragStartBounds_ = selectedShape_->boundingRect();
+    dragStartImageToShape_ = selectedShape_->imageTransform().inverted();
+    resizeAnchorImage_ = selectedShape_->handleCenter(SizeHandle{oppositeHandle(*activeHandle_)});
+    dragStartRotation_ = selectedShape_->rotationDegrees();
     viewport()->update();
     event->accept();
     return;
@@ -272,7 +387,10 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void QDrawWidget::mouseReleaseEvent(QMouseEvent* event) {
-  if (event->button() != Qt::LeftButton || dragMode_ == DragMode::None) {
+  const bool completesLeftDrag = event->button() == Qt::LeftButton && dragMode_ != DragMode::Rotate;
+  const bool completesRotation =
+      event->button() == Qt::RightButton && dragMode_ == DragMode::Rotate;
+  if (dragMode_ == DragMode::None || (!completesLeftDrag && !completesRotation)) {
     QAbstractScrollArea::mouseReleaseEvent(event);
     return;
   }
@@ -323,6 +441,7 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
     shape->draw(painter);
   }
   drawSelectionHandles(painter);
+  drawRotationHandles(painter);
 }
 
 void QDrawWidget::resizeEvent(QResizeEvent* event) {
@@ -375,18 +494,33 @@ QRectF QDrawWidget::imageBounds() const {
   return nullptr;
 }
 
+::quickshot::Shape* QDrawWidget::shapeAtRotationHandle(const QPointF& point) const {
+  for (auto shape = shapes_.rbegin(); shape != shapes_.rend(); ++shape) {
+    if (handleRect(*(*shape), HandlePosition::TopLeft).contains(point)) {
+      return shape->get();
+    }
+  }
+  return nullptr;
+}
+
 std::optional<HandlePosition> QDrawWidget::handleAt(const QPointF& point) const {
   if (selectedShape_ == nullptr) {
     return std::nullopt;
   }
 
-  const qreal imageHandleSize = handleSize / zoomFactor_;
   for (const SizeHandle& handle : selectedShape_->handles()) {
-    if (handle.hitRect(selectedShape_->boundingRect(), imageHandleSize).contains(point)) {
+    if (handleRect(*selectedShape_, handle.position()).contains(point)) {
       return handle.position();
     }
   }
   return std::nullopt;
+}
+
+QRectF QDrawWidget::handleRect(const ::quickshot::Shape& shape, HandlePosition position) const {
+  const qreal imageHandleSize = handleSize / zoomFactor_;
+  const QPointF center = shape.handleCenter(SizeHandle{position});
+  const qreal halfSize = imageHandleSize / 2.0;
+  return {center.x() - halfSize, center.y() - halfSize, imageHandleSize, imageHandleSize};
 }
 
 QRectF QDrawWidget::constrainedMove(const QRectF& bounds, const QPointF& offset) const {
@@ -442,6 +576,11 @@ QRectF QDrawWidget::resizedBounds(const QRectF& bounds, HandlePosition handle,
 }
 
 void QDrawWidget::updateHoverCursor(const QPointF& point) {
+  if (dragMode_ == DragMode::Rotate || (rotationMode_ && shapeAtRotationHandle(point) != nullptr)) {
+    viewport()->setCursor(rotationCursor());
+    return;
+  }
+
   if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
     viewport()->setCursor(SizeHandle{*handle}.cursorShape());
     return;
@@ -474,29 +613,79 @@ void QDrawWidget::updateDraggedShape(const QPointF& point) {
   }
 
   if (dragMode_ == DragMode::Resize && activeHandle_.has_value()) {
-    selectedShape_->setBoundingRect(resizedBounds(dragStartBounds_, *activeHandle_, point));
+    const QPointF localPoint = dragStartImageToShape_.map(point);
+    QRectF bounds = resizedBounds(dragStartBounds_, *activeHandle_, localPoint);
+    const HandlePosition anchorHandle = oppositeHandle(*activeHandle_);
+    const QPointF localAnchor = SizeHandle{anchorHandle}.center(bounds);
+    const QPointF mappedAnchor = rotationTransform(bounds, dragStartRotation_).map(localAnchor);
+    // A resized frame has a new center; translate it so rotation does not move the opposite handle.
+    bounds.translate(resizeAnchorImage_ - mappedAnchor);
+    selectedShape_->setBoundingRect(bounds);
+    return;
+  }
+
+  if (dragMode_ == DragMode::Rotate) {
+    const qreal currentMouseAngle = mouseAngle(selectedShape_->boundingRect().center(), point);
+    selectedShape_->setRotationDegrees(dragStartRotation_ + currentMouseAngle -
+                                       dragStartMouseAngle_);
   }
 }
 
 void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
-  if (selectedShape_ == nullptr) {
+  if (selectedShape_ == nullptr || dragMode_ == DragMode::Rotate) {
     return;
   }
 
-  const qreal imageHandleSize = handleSize / zoomFactor_;
   QPen handlePen{Qt::white};
   handlePen.setCosmetic(true);
   painter.save();
   painter.setPen(handlePen);
   painter.setBrush(QBrush{Qt::white});
   for (const SizeHandle& handle : selectedShape_->handles()) {
+    if (rotationMode_ && handle.position() == HandlePosition::TopLeft) {
+      continue;
+    }
     if (dragMode_ == DragMode::Resize && activeHandle_.has_value() &&
         handle.position() != *activeHandle_) {
       continue;
     }
-    painter.drawRect(handle.hitRect(selectedShape_->boundingRect(), imageHandleSize));
+    painter.drawRect(handleRect(*selectedShape_, handle.position()));
   }
   painter.restore();
+}
+
+void QDrawWidget::drawRotationHandles(QPainter& painter) const {
+  if (!rotationMode_ && dragMode_ != DragMode::Rotate) {
+    return;
+  }
+
+  QPen handlePen{rotationHandleColor};
+  handlePen.setCosmetic(true);
+  painter.save();
+  painter.setPen(handlePen);
+  painter.setBrush(QBrush{rotationHandleColor});
+  for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+    if (dragMode_ == DragMode::Rotate && shape.get() != selectedShape_) {
+      continue;
+    }
+    painter.drawRect(handleRect(*shape, HandlePosition::TopLeft));
+  }
+  painter.restore();
+}
+
+void QDrawWidget::setRotationMode(bool enabled) {
+  if (rotationMode_ == enabled) {
+    return;
+  }
+
+  rotationMode_ = enabled;
+  const QPoint viewportPosition = viewport()->mapFromGlobal(QCursor::pos());
+  if (viewport()->rect().contains(viewportPosition)) {
+    updateHoverCursor(imagePosition(viewportPosition));
+  } else if (!enabled && dragMode_ != DragMode::Rotate) {
+    viewport()->setCursor(Qt::ArrowCursor);
+  }
+  viewport()->update();
 }
 
 void QDrawWidget::cloneShape(const ::quickshot::Shape& shape) {

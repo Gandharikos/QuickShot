@@ -30,9 +30,21 @@ public:
   [[nodiscard]] virtual QPainterPath path() const = 0;
   [[nodiscard]] virtual std::span<const SizeHandle> handles() const noexcept = 0;
 
+  [[nodiscard]] qreal rotationDegrees() const noexcept;
+  void setRotationDegrees(qreal degrees) noexcept;
+  [[nodiscard]] QTransform imageTransform() const;
+  [[nodiscard]] QPointF mapToImage(const QPointF& point) const;
+  [[nodiscard]] QPointF mapFromImage(const QPointF& point) const;
+  [[nodiscard]] QPointF handleCenter(const SizeHandle& handle) const;
   [[nodiscard]] bool contains(const QPointF& point) const;
   void moveBy(const QPointF& offset);
   void transform(const QTransform& transformation);
+
+protected:
+  [[nodiscard]] QPainterPath mapPathToImage(const QPainterPath& shapePath) const;
+
+private:
+  qreal rotationDegrees_ = 0.0;
 };
 
 } // namespace quickshot

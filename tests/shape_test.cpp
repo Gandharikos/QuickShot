@@ -19,10 +19,12 @@ private slots:
   void rectangleProvidesEightHandles();
   void ellipseProvidesEightHandles();
   void clonePreservesConcreteShape();
+  void rotationTransformsPathAndHandles();
   void movesAndTransformsGeometry();
   void sizeHandleProvidesHitAreaAndCursor();
   void extractsRectangleRoi();
   void extractsTransparentEllipseRoi();
+  void extractsRotatedRoi();
   void savesRoiAsPng();
 };
 
@@ -49,8 +51,9 @@ void ShapeTest::ellipseProvidesEightHandles() {
 }
 
 void ShapeTest::clonePreservesConcreteShape() {
-  const quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 80.0, 40.0}};
+  quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 80.0, 40.0}};
   const quickshot::Ellipse ellipse{QRectF{5.0, 6.0, 30.0, 20.0}};
+  rectangle.setRotationDegrees(42.0);
 
   const std::unique_ptr<quickshot::Shape> rectangleClone = rectangle.clone();
   const std::unique_ptr<quickshot::Shape> ellipseClone = ellipse.clone();
@@ -59,6 +62,18 @@ void ShapeTest::clonePreservesConcreteShape() {
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipseClone.get()) != nullptr);
   QCOMPARE(rectangleClone->boundingRect(), rectangle.boundingRect());
   QCOMPARE(ellipseClone->boundingRect(), ellipse.boundingRect());
+  QCOMPARE(rectangleClone->rotationDegrees(), 42.0);
+}
+
+void ShapeTest::rotationTransformsPathAndHandles() {
+  quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 30.0, 10.0}};
+  rectangle.setRotationDegrees(90.0);
+
+  QCOMPARE(rectangle.rotationDegrees(), 90.0);
+  QCOMPARE(rectangle.path().boundingRect(), QRectF(20.0, 10.0, 10.0, 30.0));
+  QCOMPARE(rectangle.handleCenter(rectangle.handles().front()), QPointF(30.0, 10.0));
+  QCOMPARE(rectangle.mapFromImage({30.0, 10.0}), QPointF(10.0, 20.0));
+  QVERIFY(rectangle.contains(rectangle.boundingRect().center()));
 }
 
 void ShapeTest::movesAndTransformsGeometry() {
@@ -106,6 +121,19 @@ void ShapeTest::extractsTransparentEllipseRoi() {
   QCOMPARE(roi.size(), QSize(10, 10));
   QCOMPARE(roi.pixelColor(0, 0).alpha(), 0);
   QCOMPARE(roi.pixelColor(5, 5), QColor(Qt::red));
+}
+
+void ShapeTest::extractsRotatedRoi() {
+  QImage image{{30, 30}, QImage::Format_RGB32};
+  image.fill(Qt::red);
+  quickshot::Rectangle rectangle{QRectF{8.0, 10.0, 12.0, 6.0}};
+  rectangle.setRotationDegrees(45.0);
+
+  const QImage roi = quickshot::extractRoi(image, rectangle);
+
+  QVERIFY(!roi.isNull());
+  QCOMPARE(roi.pixelColor(0, 0).alpha(), 0);
+  QCOMPARE(roi.pixelColor(roi.width() / 2, roi.height() / 2), QColor(Qt::red));
 }
 
 void ShapeTest::savesRoiAsPng() {

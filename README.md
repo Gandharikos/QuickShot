@@ -28,12 +28,15 @@ development shell automatically and installs the configured Git hooks.
 
 Use **Open** to load an image. The rotate-left and rotate-right actions become available after an
 image loads successfully. Hold **Ctrl** and use the mouse wheel to zoom from the image's top-left
-corner; the zoom range is 10% to 800%. A normal mouse wheel continues to scroll the image.
+corner, or edit the toolbar factor with its arrows or mouse wheel. The zoom range is 10% to 800%.
+A normal mouse wheel over the image continues to scroll it.
 
 Use **Rectangle** or **Ellipse** to draw image-coordinate ROIs. Drag a shape to move it or use one of
 its eight handles to resize it. The selected shape is red and unselected shapes are white.
 Right-click a shape to save, clone, or delete it. Right-click outside all shapes to save or delete
-all ROIs. Saved files use PNG; ellipse pixels outside the shape are transparent.
+all ROIs. Hold **Alt** to reveal each shape's green rotation handle, then right-drag that handle to
+rotate around the shape's center. Saved files use PNG; ellipse pixels outside the shape are
+transparent.
 
 ## Nix outputs
 

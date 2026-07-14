@@ -10,6 +10,7 @@
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QImage>
+#include <QLineF>
 #include <QMenu>
 #include <QPointF>
 #include <QPushButton>
@@ -118,6 +119,7 @@ private slots:
   void createsMovesAndResizesShapes();
   void hidesInactiveHandlesWhileResizing();
   void contextMenusCloneAndDeleteShapes();
+  void rotatesShapesWithAltRightDrag();
   void createsShapesInImageCoordinates();
   void drawsImageAtOriginalSize();
   void showsScrollBarsForLargeImage();
@@ -303,7 +305,8 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::SizeVerCursor);
 
   drawWidget.rotateRight();
-  QCOMPARE(drawWidget.shapeAt(0)->boundingRect().size(), QSizeF(70.0, 80.0));
+  QCOMPARE(drawWidget.shapeAt(0)->path().boundingRect().size(), QSizeF(70.0, 80.0));
+  QCOMPARE(drawWidget.shapeAt(0)->rotationDegrees(), 90.0);
 }
 
 void MainWindowTest::hidesInactiveHandlesWhileResizing() {
@@ -366,6 +369,55 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
 
   QVERIFY(triggerContextMenuAction(drawWidget, {180, 130}, "deleteAllShapesAction"));
   QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
+}
+
+void MainWindowTest::rotatesShapesWithAltRightDrag() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("shape-rotation.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(220, 180);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+  drawWidget.setRectangleCreationMode(true);
+  drag(drawWidget.viewport(), {40, 30}, {100, 90});
+  drawWidget.setRectangleCreationMode(false);
+  drawWidget.setEllipseCreationMode(true);
+  drag(drawWidget.viewport(), {120, 30}, {180, 90});
+
+  QTest::keyPress(&drawWidget, Qt::Key_Alt);
+  QTest::mouseMove(drawWidget.viewport(), {40, 30});
+  QCoreApplication::processEvents();
+  const QImage rotationMode = renderViewport(drawWidget);
+  const QColor green{0, 200, 83};
+  QVERIFY(hasColorNear(rotationMode, {40, 30}, green));
+  QVERIFY(hasColorNear(rotationMode, {120, 30}, green));
+  QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::BitmapCursor);
+
+  const qsizetype restingGreenPixels = colorPixelCount(rotationMode, green);
+  QTest::mousePress(drawWidget.viewport(), Qt::RightButton, Qt::AltModifier, {40, 30});
+  QCoreApplication::processEvents();
+  const qsizetype draggingGreenPixels = colorPixelCount(renderViewport(drawWidget), green);
+  QVERIFY(draggingGreenPixels < restingGreenPixels);
+  QTest::mouseMove(drawWidget.viewport(), {100, 30});
+  QTest::mouseRelease(drawWidget.viewport(), Qt::RightButton, Qt::AltModifier, {100, 30});
+  QTest::keyRelease(&drawWidget, Qt::Key_Alt);
+  QCoreApplication::processEvents();
+
+  QVERIFY(qAbs(drawWidget.shapeAt(0)->rotationDegrees() - 90.0) < 0.0001);
+  const QPointF fixedCorner = drawWidget.shapeAt(0)->handleCenter(
+      quickshot::SizeHandle{quickshot::HandlePosition::BottomRight});
+  drag(drawWidget.viewport(), {100, 30}, {110, 20});
+  const QPointF resizedFixedCorner = drawWidget.shapeAt(0)->handleCenter(
+      quickshot::SizeHandle{quickshot::HandlePosition::BottomRight});
+  const qreal fixedCornerMovement = QLineF{fixedCorner, resizedFixedCorner}.length();
+  QVERIFY(fixedCornerMovement < 0.0001);
 }
 
 void MainWindowTest::createsShapesInImageCoordinates() {
