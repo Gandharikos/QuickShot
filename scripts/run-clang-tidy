@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+build_dir="${XDG_CACHE_HOME:-$project_root/.cache}/quickshot/clang-tidy"
+
+cmake -S "$project_root" -B "$build_dir" -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DBUILD_TESTING=ON >/dev/null
+cmake --build "$build_dir" >/dev/null
+
+if (($# == 0)); then
+  mapfile -t source_files < <(find "$project_root/src" "$project_root/tests" -type f -name '*.cpp')
+else
+  source_files=("$@")
+fi
+
+clang-tidy -p "$build_dir" --warnings-as-errors='*' "${source_files[@]}"

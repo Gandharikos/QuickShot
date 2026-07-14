@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+build_dir="${XDG_CACHE_HOME:-$project_root/.cache}/quickshot/compile-commands"
+
+cmake -S "$project_root" -B "$build_dir" -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DBUILD_TESTING=ON \
+  "$@"
+
+ln -sfn "$build_dir/compile_commands.json" "$project_root/compile_commands.json"
+echo "compile_commands.json -> $build_dir/compile_commands.json"
