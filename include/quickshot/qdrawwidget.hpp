@@ -11,9 +11,7 @@
 #include <vector>
 
 class QContextMenuEvent;
-class QEvent;
 class QMouseEvent;
-class QObject;
 class QPainter;
 class QPaintEvent;
 class QResizeEvent;
@@ -50,7 +48,6 @@ signals:
 
 protected:
   void contextMenuEvent(QContextMenuEvent* event) override;
-  bool eventFilter(QObject* watched, QEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
@@ -65,7 +62,6 @@ private:
   [[nodiscard]] QPointF imagePosition(const QPointF& viewportPosition) const;
   [[nodiscard]] QRectF imageBounds() const;
   [[nodiscard]] ::quickshot::Shape* shapeAt(const QPointF& point) const;
-  [[nodiscard]] ::quickshot::Shape* shapeAtRotationHandle(const QPointF& point) const;
   [[nodiscard]] std::optional<HandlePosition> handleAt(const QPointF& point) const;
   [[nodiscard]] QRectF handleRect(const ::quickshot::Shape& shape, HandlePosition position) const;
   [[nodiscard]] QRectF constrainedMove(const QRectF& bounds, const QPointF& offset) const;
@@ -74,8 +70,6 @@ private:
   void updateHoverCursor(const QPointF& point);
   void updateDraggedShape(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
-  void drawRotationHandles(QPainter& painter) const;
-  void setRotationMode(bool enabled);
   void cloneShape(const ::quickshot::Shape& shape);
   void deleteShape(const ::quickshot::Shape& shape);
   void deleteAllShapes();
@@ -99,7 +93,6 @@ private:
   qreal dragStartMouseAngle_ = 0.0;
   QString lastSaveDirectory_;
   qreal zoomFactor_ = 1.0;
-  bool rotationMode_ = false;
   bool suppressContextMenu_ = false;
 };
 

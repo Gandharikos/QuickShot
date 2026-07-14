@@ -119,7 +119,7 @@ private slots:
   void createsMovesAndResizesShapes();
   void hidesInactiveHandlesWhileResizing();
   void contextMenusCloneAndDeleteShapes();
-  void rotatesShapesWithAltRightDrag();
+  void resizesAndRotatesFromShapeHandles();
   void createsShapesInImageCoordinates();
   void drawsImageAtOriginalSize();
   void showsScrollBarsForLargeImage();
@@ -371,7 +371,7 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
   QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
 }
 
-void MainWindowTest::rotatesShapesWithAltRightDrag() {
+void MainWindowTest::resizesAndRotatesFromShapeHandles() {
   QTemporaryDir temporaryDirectory;
   QVERIFY(temporaryDirectory.isValid());
 
@@ -387,27 +387,19 @@ void MainWindowTest::rotatesShapesWithAltRightDrag() {
   QCoreApplication::processEvents();
   drawWidget.setRectangleCreationMode(true);
   drag(drawWidget.viewport(), {40, 30}, {100, 90});
-  drawWidget.setRectangleCreationMode(false);
-  drawWidget.setEllipseCreationMode(true);
-  drag(drawWidget.viewport(), {120, 30}, {180, 90});
 
-  QTest::keyPress(&drawWidget, Qt::Key_Alt);
-  QTest::mouseMove(drawWidget.viewport(), {40, 30});
+  QTest::mouseMove(drawWidget.viewport(), {100, 60});
   QCoreApplication::processEvents();
-  const QImage rotationMode = renderViewport(drawWidget);
-  const QColor green{0, 200, 83};
-  QVERIFY(hasColorNear(rotationMode, {40, 30}, green));
-  QVERIFY(hasColorNear(rotationMode, {120, 30}, green));
+  QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::SizeHorCursor);
+
+  const qsizetype restingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  QTest::mousePress(drawWidget.viewport(), Qt::RightButton, Qt::NoModifier, {100, 60});
+  QCoreApplication::processEvents();
   QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::BitmapCursor);
-
-  const qsizetype restingGreenPixels = colorPixelCount(rotationMode, green);
-  QTest::mousePress(drawWidget.viewport(), Qt::RightButton, Qt::AltModifier, {40, 30});
-  QCoreApplication::processEvents();
-  const qsizetype draggingGreenPixels = colorPixelCount(renderViewport(drawWidget), green);
-  QVERIFY(draggingGreenPixels < restingGreenPixels);
-  QTest::mouseMove(drawWidget.viewport(), {100, 30});
-  QTest::mouseRelease(drawWidget.viewport(), Qt::RightButton, Qt::AltModifier, {100, 30});
-  QTest::keyRelease(&drawWidget, Qt::Key_Alt);
+  const qsizetype rotatingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  QVERIFY(rotatingWhitePixels < restingWhitePixels);
+  QTest::mouseMove(drawWidget.viewport(), {70, 90});
+  QTest::mouseRelease(drawWidget.viewport(), Qt::RightButton, Qt::NoModifier, {70, 90});
   QCoreApplication::processEvents();
 
   QVERIFY(qAbs(drawWidget.shapeAt(0)->rotationDegrees() - 90.0) < 0.0001);
