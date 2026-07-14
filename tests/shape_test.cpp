@@ -17,7 +17,8 @@ class ShapeTest final : public QObject {
 
 private slots:
   void rectangleProvidesEightHandles();
-  void ellipseProvidesCardinalHandles();
+  void ellipseProvidesEightHandles();
+  void clonePreservesConcreteShape();
   void movesAndTransformsGeometry();
   void sizeHandleProvidesHitAreaAndCursor();
   void extractsRectangleRoi();
@@ -36,17 +37,28 @@ void ShapeTest::rectangleProvidesEightHandles() {
   QCOMPARE(rectangle.handles().back().position(), quickshot::HandlePosition::Left);
 }
 
-void ShapeTest::ellipseProvidesCardinalHandles() {
+void ShapeTest::ellipseProvidesEightHandles() {
   const quickshot::Ellipse ellipse{QRectF{10.0, 20.0, 30.0, 40.0}};
 
   QCOMPARE(ellipse.boundingRect(), QRectF(10.0, 20.0, 30.0, 40.0));
   QVERIFY(ellipse.contains(ellipse.boundingRect().center()));
   QVERIFY(!ellipse.contains(ellipse.boundingRect().topLeft()));
-  QCOMPARE(ellipse.handles().size(), std::size_t{4});
-  QCOMPARE(ellipse.handles()[0].position(), quickshot::HandlePosition::Top);
-  QCOMPARE(ellipse.handles()[1].position(), quickshot::HandlePosition::Right);
-  QCOMPARE(ellipse.handles()[2].position(), quickshot::HandlePosition::Bottom);
-  QCOMPARE(ellipse.handles()[3].position(), quickshot::HandlePosition::Left);
+  QCOMPARE(ellipse.handles().size(), std::size_t{8});
+  QCOMPARE(ellipse.handles().front().position(), quickshot::HandlePosition::TopLeft);
+  QCOMPARE(ellipse.handles().back().position(), quickshot::HandlePosition::Left);
+}
+
+void ShapeTest::clonePreservesConcreteShape() {
+  const quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 80.0, 40.0}};
+  const quickshot::Ellipse ellipse{QRectF{5.0, 6.0, 30.0, 20.0}};
+
+  const std::unique_ptr<quickshot::Shape> rectangleClone = rectangle.clone();
+  const std::unique_ptr<quickshot::Shape> ellipseClone = ellipse.clone();
+
+  QVERIFY(dynamic_cast<const quickshot::Rectangle*>(rectangleClone.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipseClone.get()) != nullptr);
+  QCOMPARE(rectangleClone->boundingRect(), rectangle.boundingRect());
+  QCOMPARE(ellipseClone->boundingRect(), ellipse.boundingRect());
 }
 
 void ShapeTest::movesAndTransformsGeometry() {

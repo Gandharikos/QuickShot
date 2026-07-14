@@ -66,6 +66,9 @@ private:
   void updateHoverCursor(const QPointF& point);
   void updateDraggedShape(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
+  void cloneShape(const ::quickshot::Shape& shape);
+  void deleteShape(const ::quickshot::Shape& shape);
+  void deleteAllShapes();
   void saveRois(const std::vector<const ::quickshot::Shape*>& targets);
   void setCreationMode(CreationMode mode, bool enabled);
   void rotateImage(qreal degrees);

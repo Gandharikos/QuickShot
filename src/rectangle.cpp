@@ -1,30 +1,15 @@
 #include "quickshot/rectangle.hpp"
 
-#include <QColor>
 #include <QPainter>
-#include <QPen>
+#include <memory>
 
 namespace quickshot {
-namespace {
-
-QPen shapePen() {
-  QPen pen{QColor{0, 220, 120}};
-  pen.setCosmetic(true);
-  pen.setWidth(2);
-  return pen;
-}
-
-} // namespace
 
 Rectangle::Rectangle(const QRectF& bounds) : bounds_(bounds.normalized()) {}
 
-void Rectangle::draw(QPainter& painter) const {
-  painter.save();
-  painter.setPen(shapePen());
-  painter.setBrush(Qt::NoBrush);
-  painter.drawRect(bounds_);
-  painter.restore();
-}
+std::unique_ptr<Shape> Rectangle::clone() const { return std::make_unique<Rectangle>(bounds_); }
+
+void Rectangle::draw(QPainter& painter) const { painter.drawRect(bounds_); }
 
 QRectF Rectangle::boundingRect() const { return bounds_; }
 

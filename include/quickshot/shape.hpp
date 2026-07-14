@@ -6,6 +6,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QTransform>
+#include <memory>
 #include <span>
 
 class QPainter;
@@ -22,6 +23,7 @@ public:
   Shape(Shape&&) = delete;
   Shape& operator=(Shape&&) = delete;
 
+  [[nodiscard]] virtual std::unique_ptr<Shape> clone() const = 0;
   virtual void draw(QPainter& painter) const = 0;
   [[nodiscard]] virtual QRectF boundingRect() const = 0;
   virtual void setBoundingRect(const QRectF& bounds) = 0;

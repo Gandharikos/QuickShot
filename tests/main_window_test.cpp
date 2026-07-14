@@ -3,15 +3,19 @@
 #include "quickshot/shape.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QColor>
+#include <QContextMenuEvent>
 #include <QCoreApplication>
 #include <QFile>
 #include <QImage>
+#include <QMenu>
 #include <QPointF>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <QToolBar>
 #include <QWheelEvent>
 
@@ -33,6 +37,63 @@ void drag(QWidget* widget, const QPoint& start, const QPoint& end) {
   QCoreApplication::processEvents();
 }
 
+QImage renderViewport(const quickshot::QDrawWidget& drawWidget) {
+  QImage renderedImage{drawWidget.viewport()->size(), QImage::Format_RGB32};
+  renderedImage.fill(Qt::black);
+  drawWidget.viewport()->render(&renderedImage);
+  return renderedImage;
+}
+
+qsizetype colorPixelCount(const QImage& image, const QColor& color) {
+  qsizetype count = 0;
+  for (int y = 0; y < image.height(); ++y) {
+    for (int x = 0; x < image.width(); ++x) {
+      if (image.pixelColor(x, y) == color) {
+        ++count;
+      }
+    }
+  }
+  return count;
+}
+
+bool hasColorNear(const QImage& image, const QPoint& point, const QColor& color) {
+  constexpr int radius = 2;
+  for (int y = point.y() - radius; y <= point.y() + radius; ++y) {
+    for (int x = point.x() - radius; x <= point.x() + radius; ++x) {
+      if (image.rect().contains(x, y) && image.pixelColor(x, y) == color) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool triggerContextMenuAction(quickshot::QDrawWidget& drawWidget, const QPoint& position,
+                              const char* actionName) {
+  bool actionFound = false;
+  QTimer::singleShot(0, [&actionFound, actionName]() {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (menu == nullptr) {
+      return;
+    }
+
+    auto* action = menu->findChild<QAction*>(actionName);
+    if (action == nullptr) {
+      menu->close();
+      return;
+    }
+
+    actionFound = true;
+    QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, menu->actionGeometry(action).center());
+  });
+
+  QContextMenuEvent event{QContextMenuEvent::Mouse, position,
+                          drawWidget.viewport()->mapToGlobal(position)};
+  QCoreApplication::sendEvent(drawWidget.viewport(), &event);
+  QCoreApplication::processEvents();
+  return actionFound;
+}
+
 } // namespace
 
 class MainWindowTest final : public QObject {
@@ -44,6 +105,8 @@ private slots:
   void providesImageControls();
   void enablesAndRunsRotationActions();
   void createsMovesAndResizesShapes();
+  void hidesInactiveHandlesWhileResizing();
+  void contextMenusCloneAndDeleteShapes();
   void createsShapesInImageCoordinates();
   void drawsImageAtOriginalSize();
   void showsScrollBarsForLargeImage();
@@ -181,13 +244,75 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   drag(drawWidget.viewport(), {120, 20}, {180, 80});
   QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
   QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(120.0, 20.0, 60.0, 60.0));
-  QCOMPARE(drawWidget.shapeAt(1)->handles().size(), std::size_t{4});
+  QCOMPARE(drawWidget.shapeAt(1)->handles().size(), std::size_t{8});
 
   QTest::mouseMove(drawWidget.viewport(), {150, 20});
   QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::SizeVerCursor);
 
   drawWidget.rotateRight();
   QCOMPARE(drawWidget.shapeAt(0)->boundingRect().size(), QSizeF(70.0, 80.0));
+}
+
+void MainWindowTest::hidesInactiveHandlesWhileResizing() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("handles.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(220, 180);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+  drawWidget.setEllipseCreationMode(true);
+  drag(drawWidget.viewport(), {40, 30}, {140, 110});
+
+  const qsizetype restingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  QVERIFY(restingWhitePixels > 0);
+
+  QTest::mousePress(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {140, 110});
+  QCoreApplication::processEvents();
+  const qsizetype draggingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  QVERIFY(draggingWhitePixels * 2 < restingWhitePixels);
+
+  QTest::mouseRelease(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {140, 110});
+  QCoreApplication::processEvents();
+  const qsizetype releasedWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  QCOMPARE(releasedWhitePixels, restingWhitePixels);
+}
+
+void MainWindowTest::contextMenusCloneAndDeleteShapes() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("context-menu.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(220, 180);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+  drawWidget.setRectangleCreationMode(true);
+  drag(drawWidget.viewport(), {40, 30}, {100, 90});
+
+  QVERIFY(triggerContextMenuAction(drawWidget, {60, 50}, "cloneShapeAction"));
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+  QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(30.0, 30.0, 60.0, 60.0));
+  const QImage clonedShapes = renderViewport(drawWidget);
+  QVERIFY(hasColorNear(clonedShapes, {30, 45}, Qt::red));
+  QVERIFY(hasColorNear(clonedShapes, {100, 45}, Qt::white));
+
+  QVERIFY(triggerContextMenuAction(drawWidget, {35, 50}, "deleteShapeAction"));
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+
+  QVERIFY(triggerContextMenuAction(drawWidget, {180, 130}, "deleteAllShapesAction"));
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
 }
 
 void MainWindowTest::createsShapesInImageCoordinates() {

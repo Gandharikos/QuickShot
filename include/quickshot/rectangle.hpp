@@ -10,6 +10,7 @@ class Rectangle final : public Shape {
 public:
   explicit Rectangle(const QRectF& bounds);
 
+  [[nodiscard]] std::unique_ptr<Shape> clone() const override;
   void draw(QPainter& painter) const override;
   [[nodiscard]] QRectF boundingRect() const override;
   void setBoundingRect(const QRectF& bounds) override;

@@ -10,6 +10,7 @@ class Ellipse final : public Shape {
 public:
   explicit Ellipse(const QRectF& bounds);
 
+  [[nodiscard]] std::unique_ptr<Shape> clone() const override;
   void draw(QPainter& painter) const override;
   [[nodiscard]] QRectF boundingRect() const override;
   void setBoundingRect(const QRectF& bounds) override;
@@ -18,10 +19,10 @@ public:
 
 private:
   static constexpr std::array handles_ = {
-      SizeHandle{HandlePosition::Top},
-      SizeHandle{HandlePosition::Right},
-      SizeHandle{HandlePosition::Bottom},
-      SizeHandle{HandlePosition::Left},
+      SizeHandle{HandlePosition::TopLeft},     SizeHandle{HandlePosition::Top},
+      SizeHandle{HandlePosition::TopRight},    SizeHandle{HandlePosition::Right},
+      SizeHandle{HandlePosition::BottomRight}, SizeHandle{HandlePosition::Bottom},
+      SizeHandle{HandlePosition::BottomLeft},  SizeHandle{HandlePosition::Left},
   };
 
   QRectF bounds_;

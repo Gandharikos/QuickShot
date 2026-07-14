@@ -30,6 +30,7 @@
 #include <QWheelEvent>
 #include <QtMath>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <ranges>
 #include <utility>
@@ -43,6 +44,7 @@ constexpr qreal zoomPerWheelStep = 1.1;
 constexpr qreal wheelStepAngle = 120.0;
 constexpr qreal handleSize = 8.0;
 constexpr qreal minimumShapeSize = 1.0;
+constexpr qreal cloneOffset = 10.0;
 
 QString pngFileName(const QString& selectedFileName) {
   const QFileInfo selectedFile{selectedFileName};
@@ -141,23 +143,44 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
   ::quickshot::Shape* targetShape = shapeAt(point);
 
   QMenu menu{viewport()};
-  QAction* saveAction = menu.addAction(tr("Save ROI"));
-  saveAction->setObjectName("saveRoiAction");
-  saveAction->setEnabled(targetShape != nullptr || !shapes_.empty());
+  if (targetShape != nullptr) {
+    selectedShape_ = targetShape;
+    viewport()->update();
 
-  if (menu.exec(event->globalPos()) == saveAction) {
-    std::vector<const ::quickshot::Shape*> targets;
-    if (targetShape != nullptr) {
-      selectedShape_ = targetShape;
-      targets.push_back(targetShape);
-      viewport()->update();
-    } else {
+    QAction* saveAction = menu.addAction(tr("Save ROI"));
+    saveAction->setObjectName("saveRoiAction");
+    QAction* cloneAction = menu.addAction(tr("Clone"));
+    cloneAction->setObjectName("cloneShapeAction");
+    QAction* deleteAction = menu.addAction(tr("Delete"));
+    deleteAction->setObjectName("deleteShapeAction");
+
+    const QAction* selectedAction = menu.exec(event->globalPos());
+    if (selectedAction == saveAction) {
+      saveRois({targetShape});
+    } else if (selectedAction == cloneAction) {
+      cloneShape(*targetShape);
+    } else if (selectedAction == deleteAction) {
+      deleteShape(*targetShape);
+    }
+  } else {
+    QAction* saveAllAction = menu.addAction(tr("Save All"));
+    saveAllAction->setObjectName("saveAllRoisAction");
+    saveAllAction->setEnabled(!shapes_.empty());
+    QAction* deleteAllAction = menu.addAction(tr("Delete All"));
+    deleteAllAction->setObjectName("deleteAllShapesAction");
+    deleteAllAction->setEnabled(!shapes_.empty());
+
+    const QAction* selectedAction = menu.exec(event->globalPos());
+    if (selectedAction == saveAllAction) {
+      std::vector<const ::quickshot::Shape*> targets;
       targets.reserve(shapes_.size());
       for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
         targets.push_back(shape.get());
       }
+      saveRois(targets);
+    } else if (selectedAction == deleteAllAction) {
+      deleteAllShapes();
     }
-    saveRois(targets);
   }
 
   event->accept();
@@ -193,6 +216,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
     activeHandle_ = handle;
     dragStart_ = point;
     dragStartBounds_ = selectedShape_->boundingRect();
+    viewport()->update();
     event->accept();
     return;
   }
@@ -273,7 +297,13 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
   painter.drawImage(QPointF{0.0, 0.0}, image_);
 
   painter.setRenderHint(QPainter::Antialiasing);
+  QPen shapePen;
+  shapePen.setCosmetic(true);
+  shapePen.setWidth(2);
+  painter.setBrush(Qt::NoBrush);
   for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+    shapePen.setColor(shape.get() == selectedShape_ ? Qt::red : Qt::white);
+    painter.setPen(shapePen);
     shape->draw(painter);
   }
   drawSelectionHandles(painter);
@@ -441,15 +471,65 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
   }
 
   const qreal imageHandleSize = handleSize / zoomFactor_;
-  QPen handlePen{Qt::black};
+  QPen handlePen{Qt::white};
   handlePen.setCosmetic(true);
   painter.save();
   painter.setPen(handlePen);
   painter.setBrush(QBrush{Qt::white});
   for (const SizeHandle& handle : selectedShape_->handles()) {
+    if (dragMode_ == DragMode::Resize && activeHandle_.has_value() &&
+        handle.position() != *activeHandle_) {
+      continue;
+    }
     painter.drawRect(handle.hitRect(selectedShape_->boundingRect(), imageHandleSize));
   }
   painter.restore();
+}
+
+void QDrawWidget::cloneShape(const ::quickshot::Shape& shape) {
+  const QRectF sourceBounds = shape.boundingRect();
+  constexpr std::array offsets = {QPointF{-cloneOffset, 0.0}, QPointF{cloneOffset, 0.0},
+                                  QPointF{0.0, -cloneOffset}, QPointF{0.0, cloneOffset}};
+
+  for (const QPointF& offset : offsets) {
+    const QRectF cloneBounds = constrainedMove(sourceBounds, offset);
+    if (cloneBounds == sourceBounds) {
+      continue;
+    }
+
+    std::unique_ptr<::quickshot::Shape> clonedShape = shape.clone();
+    clonedShape->setBoundingRect(cloneBounds);
+    selectedShape_ = clonedShape.get();
+    shapes_.push_back(std::move(clonedShape));
+    viewport()->update();
+    return;
+  }
+}
+
+void QDrawWidget::deleteShape(const ::quickshot::Shape& shape) {
+  const auto shapeToDelete =
+      std::ranges::find_if(shapes_, [&shape](const std::unique_ptr<::quickshot::Shape>& candidate) {
+        return candidate.get() == &shape;
+      });
+  if (shapeToDelete == shapes_.end()) {
+    return;
+  }
+
+  if (selectedShape_ == shapeToDelete->get()) {
+    selectedShape_ = nullptr;
+  }
+  shapes_.erase(shapeToDelete);
+  activeHandle_.reset();
+  dragMode_ = DragMode::None;
+  viewport()->update();
+}
+
+void QDrawWidget::deleteAllShapes() {
+  shapes_.clear();
+  selectedShape_ = nullptr;
+  activeHandle_.reset();
+  dragMode_ = DragMode::None;
+  viewport()->update();
 }
 
 void QDrawWidget::saveRois(const std::vector<const ::quickshot::Shape*>& targets) {

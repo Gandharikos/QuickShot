@@ -1,30 +1,15 @@
 #include "quickshot/ellipse.hpp"
 
-#include <QColor>
 #include <QPainter>
-#include <QPen>
+#include <memory>
 
 namespace quickshot {
-namespace {
-
-QPen shapePen() {
-  QPen pen{QColor{255, 190, 40}};
-  pen.setCosmetic(true);
-  pen.setWidth(2);
-  return pen;
-}
-
-} // namespace
 
 Ellipse::Ellipse(const QRectF& bounds) : bounds_(bounds.normalized()) {}
 
-void Ellipse::draw(QPainter& painter) const {
-  painter.save();
-  painter.setPen(shapePen());
-  painter.setBrush(Qt::NoBrush);
-  painter.drawEllipse(bounds_);
-  painter.restore();
-}
+std::unique_ptr<Shape> Ellipse::clone() const { return std::make_unique<Ellipse>(bounds_); }
+
+void Ellipse::draw(QPainter& painter) const { painter.drawEllipse(bounds_); }
 
 QRectF Ellipse::boundingRect() const { return bounds_; }
 
