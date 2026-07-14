@@ -14,6 +14,7 @@ stdenv.mkDerivation (finalAttrs: {
     root = ../.;
     fileset = lib.fileset.unions [
       ../CMakeLists.txt
+      ../assets
       ../include
       ../src
       ../tests
@@ -26,7 +27,10 @@ stdenv.mkDerivation (finalAttrs: {
     qt6.wrapQtAppsHook
   ];
 
-  buildInputs = [ qt6.qtbase ];
+  buildInputs = [
+    qt6.qtbase
+    qt6.qtsvg
+  ];
 
   cmakeFlags = [
     (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck)

@@ -26,8 +26,9 @@ development shell automatically and installs the configured Git hooks.
 
 ## Image controls
 
-Use **Open** to load an image. Hold **Ctrl** and use the mouse wheel to zoom from the image's
-top-left corner; the zoom range is 10% to 800%. A normal mouse wheel continues to scroll the image.
+Use **Open** to load an image. The rotate-left and rotate-right actions become available after an
+image loads successfully. Hold **Ctrl** and use the mouse wheel to zoom from the image's top-left
+corner; the zoom range is 10% to 800%. A normal mouse wheel continues to scroll the image.
 
 ## Nix outputs
 

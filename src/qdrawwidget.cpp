@@ -8,6 +8,7 @@
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QSize>
+#include <QTransform>
 #include <QWheelEvent>
 #include <QtMath>
 #include <algorithm>
@@ -44,6 +45,7 @@ bool QDrawWidget::loadImage(const QString& fileName) {
   verticalScrollBar()->setValue(0);
   updateScrollBars();
   viewport()->update();
+  emit imageAvailabilityChanged(true);
   return true;
 }
 
@@ -52,6 +54,10 @@ bool QDrawWidget::hasImage() const noexcept { return !image_.isNull(); }
 qreal QDrawWidget::zoomFactor() const noexcept { return zoomFactor_; }
 
 QSize QDrawWidget::sizeHint() const { return {640, 360}; }
+
+void QDrawWidget::rotateLeft() { rotateImage(-90.0); }
+
+void QDrawWidget::rotateRight() { rotateImage(90.0); }
 
 void QDrawWidget::paintEvent(QPaintEvent* event) {
   QAbstractScrollArea::paintEvent(event);
@@ -107,6 +113,18 @@ void QDrawWidget::wheelEvent(QWheelEvent* event) {
   updateScrollBars();
   viewport()->update();
   event->accept();
+}
+
+void QDrawWidget::rotateImage(qreal degrees) {
+  if (image_.isNull()) {
+    return;
+  }
+
+  QTransform rotation;
+  rotation.rotate(degrees);
+  image_ = image_.transformed(rotation);
+  updateScrollBars();
+  viewport()->update();
 }
 
 QSize QDrawWidget::scaledImageSize() const {

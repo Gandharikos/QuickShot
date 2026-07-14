@@ -20,6 +20,11 @@ public:
   [[nodiscard]] bool hasImage() const noexcept;
   [[nodiscard]] qreal zoomFactor() const noexcept;
   [[nodiscard]] QSize sizeHint() const override;
+  void rotateLeft();
+  void rotateRight();
+
+signals:
+  void imageAvailabilityChanged(bool available);
 
 protected:
   void paintEvent(QPaintEvent* event) override;
@@ -27,6 +32,7 @@ protected:
   void wheelEvent(QWheelEvent* event) override;
 
 private:
+  void rotateImage(qreal degrees);
   [[nodiscard]] QSize scaledImageSize() const;
   void updateScrollBars();
 

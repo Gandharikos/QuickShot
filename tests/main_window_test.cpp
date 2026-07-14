@@ -1,6 +1,7 @@
 #include "quickshot/main_window.hpp"
 #include "quickshot/qdrawwidget.hpp"
 
+#include <QAction>
 #include <QColor>
 #include <QCoreApplication>
 #include <QFile>
@@ -10,6 +11,7 @@
 #include <QScrollBar>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QToolBar>
 #include <QWheelEvent>
 
 namespace {
@@ -32,6 +34,7 @@ private slots:
   void hasExpectedTitle();
   void hasUsefulDefaultSize();
   void providesImageControls();
+  void enablesAndRunsRotationActions();
   void drawsImageAtOriginalSize();
   void showsScrollBarsForLargeImage();
   void zoomsFromImageTopLeft();
@@ -54,11 +57,65 @@ void MainWindowTest::providesImageControls() {
   const quickshot::MainWindow window;
   const auto* openButton = window.findChild<QPushButton*>("openButton");
   const auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  const auto* toolbar = window.findChild<QToolBar*>("mainToolBar");
+  const auto* rotateLeftAction = window.findChild<QAction*>("rotateLeftAction");
+  const auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
 
   QVERIFY(openButton != nullptr);
   QCOMPARE(openButton->text(), QStringLiteral("Open"));
   QVERIFY(drawWidget != nullptr);
   QCOMPARE(window.centralWidget(), drawWidget);
+  QVERIFY(toolbar != nullptr);
+  QVERIFY(rotateLeftAction != nullptr);
+  QVERIFY(rotateRightAction != nullptr);
+  QCOMPARE(rotateLeftAction->text(), QStringLiteral("Rotate Left"));
+  QCOMPARE(rotateRightAction->text(), QStringLiteral("Rotate Right"));
+  QVERIFY(!rotateLeftAction->icon().isNull());
+  QVERIFY(!rotateRightAction->icon().isNull());
+  QVERIFY(!rotateLeftAction->isEnabled());
+  QVERIFY(!rotateRightAction->isEnabled());
+
+  const QList<QAction*> toolbarActions = toolbar->actions();
+  QCOMPARE(toolbarActions.size(), qsizetype{4});
+  QVERIFY(toolbarActions.at(1)->isSeparator());
+  QCOMPARE(toolbarActions.at(2), rotateLeftAction);
+  QCOMPARE(toolbarActions.at(3), rotateRightAction);
+}
+
+void MainWindowTest::enablesAndRunsRotationActions() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({400, 40}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::red);
+  const QString imagePath = temporaryDirectory.filePath("rotate.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::MainWindow window;
+  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* rotateLeftAction = window.findChild<QAction*>("rotateLeftAction");
+  auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
+  QVERIFY(drawWidget != nullptr);
+  QVERIFY(rotateLeftAction != nullptr);
+  QVERIFY(rotateRightAction != nullptr);
+
+  window.resize(180, 180);
+  window.show();
+  QCoreApplication::processEvents();
+  QVERIFY(drawWidget->loadImage(imagePath));
+
+  QVERIFY(rotateLeftAction->isEnabled());
+  QVERIFY(rotateRightAction->isEnabled());
+  QVERIFY(drawWidget->horizontalScrollBar()->maximum() > 0);
+  QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
+
+  rotateRightAction->trigger();
+  QCOMPARE(drawWidget->horizontalScrollBar()->maximum(), 0);
+  QVERIFY(drawWidget->verticalScrollBar()->maximum() > 0);
+
+  rotateLeftAction->trigger();
+  QVERIFY(drawWidget->horizontalScrollBar()->maximum() > 0);
+  QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
 }
 
 void MainWindowTest::drawsImageAtOriginalSize() {
