@@ -129,6 +129,7 @@
                 entry = lib.getExe clangTidy;
                 files = "\\.(cc|cpp|cxx)$";
                 pass_filenames = true;
+                require_serial = true;
                 stages = [ "pre-push" ];
               };
               cmake-format.enable = true;
