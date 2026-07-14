@@ -5,10 +5,25 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QImage>
+#include <QPointF>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QWheelEvent>
+
+namespace {
+
+void sendControlWheel(quickshot::QDrawWidget& drawWidget, int angleDelta,
+                      const QPointF& position = {30.0, 20.0}) {
+  const QPoint globalPosition = drawWidget.viewport()->mapToGlobal(position.toPoint());
+  QWheelEvent event{position,     globalPosition,      QPoint{},          QPoint{0, angleDelta},
+                    Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false};
+  QCoreApplication::sendEvent(drawWidget.viewport(), &event);
+  QCoreApplication::processEvents();
+}
+
+} // namespace
 
 class MainWindowTest final : public QObject {
   Q_OBJECT
@@ -19,6 +34,8 @@ private slots:
   void providesImageControls();
   void drawsImageAtOriginalSize();
   void showsScrollBarsForLargeImage();
+  void zoomsFromImageTopLeft();
+  void clampsZoomAndResetsForNewImage();
   void rejectsNonImageFiles();
 };
 
@@ -94,6 +111,70 @@ void MainWindowTest::showsScrollBarsForLargeImage() {
            sourceImage.width() - drawWidget.viewport()->width());
   QCOMPARE(drawWidget.verticalScrollBar()->maximum(),
            sourceImage.height() - drawWidget.viewport()->height());
+}
+
+void MainWindowTest::zoomsFromImageTopLeft() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({400, 300}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::red);
+  const QString imagePath = temporaryDirectory.filePath("zoom.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(120, 100);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+
+  drawWidget.horizontalScrollBar()->setValue(20);
+  drawWidget.verticalScrollBar()->setValue(10);
+  const int horizontalMaximum = drawWidget.horizontalScrollBar()->maximum();
+  const int verticalMaximum = drawWidget.verticalScrollBar()->maximum();
+
+  sendControlWheel(drawWidget, 120);
+
+  QVERIFY(qAbs(drawWidget.zoomFactor() - 1.1) < 0.0001);
+  QCOMPARE(drawWidget.horizontalScrollBar()->value(), 20);
+  QCOMPARE(drawWidget.verticalScrollBar()->value(), 10);
+  QVERIFY(drawWidget.horizontalScrollBar()->maximum() > horizontalMaximum);
+  QVERIFY(drawWidget.verticalScrollBar()->maximum() > verticalMaximum);
+
+  sendControlWheel(drawWidget, -120);
+
+  QVERIFY(qAbs(drawWidget.zoomFactor() - 1.0) < 0.0001);
+  QCOMPARE(drawWidget.horizontalScrollBar()->value(), 20);
+  QCOMPARE(drawWidget.verticalScrollBar()->value(), 10);
+}
+
+void MainWindowTest::clampsZoomAndResetsForNewImage() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::red);
+  const QString imagePath = temporaryDirectory.filePath("limits.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(100, 80);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+
+  sendControlWheel(drawWidget, 12000);
+  QCOMPARE(drawWidget.zoomFactor(), 8.0);
+
+  drawWidget.horizontalScrollBar()->setValue(50);
+  drawWidget.verticalScrollBar()->setValue(40);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  QCOMPARE(drawWidget.zoomFactor(), 1.0);
+  QCOMPARE(drawWidget.horizontalScrollBar()->value(), 0);
+  QCOMPARE(drawWidget.verticalScrollBar()->value(), 0);
+
+  sendControlWheel(drawWidget, -24000);
+  QCOMPARE(drawWidget.zoomFactor(), 0.1);
 }
 
 void MainWindowTest::rejectsNonImageFiles() {

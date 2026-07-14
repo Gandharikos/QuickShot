@@ -24,6 +24,11 @@ ctest --test-dir build --output-on-failure
 With direnv installed, run `direnv allow` once. Entering the directory then loads the same
 development shell automatically and installs the configured Git hooks.
 
+## Image controls
+
+Use **Open** to load an image. Hold **Ctrl** and use the mouse wheel to zoom from the image's
+top-left corner; the zoom range is 10% to 800%. A normal mouse wheel continues to scroll the image.
+
 ## Nix outputs
 
 ```console

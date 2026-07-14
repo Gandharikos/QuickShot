@@ -3,15 +3,26 @@
 #include <QFrame>
 #include <QImageReader>
 #include <QPainter>
-#include <QPoint>
+#include <QPointF>
 #include <QRectF>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QSize>
+#include <QWheelEvent>
+#include <QtMath>
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace quickshot {
+namespace {
+
+constexpr qreal minimumZoom = 0.1;
+constexpr qreal maximumZoom = 8.0;
+constexpr qreal zoomPerWheelStep = 1.1;
+constexpr qreal wheelStepAngle = 120.0;
+
+} // namespace
 
 QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent) {
   setFrameShape(QFrame::NoFrame);
@@ -28,12 +39,17 @@ bool QDrawWidget::loadImage(const QString& fileName) {
   }
 
   image_ = std::move(image);
+  zoomFactor_ = 1.0;
+  horizontalScrollBar()->setValue(0);
+  verticalScrollBar()->setValue(0);
   updateScrollBars();
   viewport()->update();
   return true;
 }
 
 bool QDrawWidget::hasImage() const noexcept { return !image_.isNull(); }
+
+qreal QDrawWidget::zoomFactor() const noexcept { return zoomFactor_; }
 
 QSize QDrawWidget::sizeHint() const { return {640, 360}; }
 
@@ -43,16 +59,19 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
   QPainter painter(viewport());
   const QRectF viewportRect{0.0, 0.0, static_cast<qreal>(viewport()->width()),
                             static_cast<qreal>(viewport()->height())};
-  // The image stays at its native size, so uncovered viewport pixels remain black.
+  // Uncovered viewport pixels remain black at every zoom level.
   painter.fillRect(viewportRect, Qt::black);
 
   if (image_.isNull()) {
     return;
   }
 
-  // Scrollbar values are content offsets; negate them to map the image into viewport coordinates.
-  const QPoint imagePosition{-horizontalScrollBar()->value(), -verticalScrollBar()->value()};
-  painter.drawImage(imagePosition, image_);
+  painter.setRenderHint(QPainter::SmoothPixmapTransform);
+  // Scrollbar values are offsets in scaled content coordinates, so translate in the opposite
+  // direction before scaling the image uniformly.
+  painter.translate(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
+  painter.scale(zoomFactor_, zoomFactor_);
+  painter.drawImage(QPointF{0.0, 0.0}, image_);
 }
 
 void QDrawWidget::resizeEvent(QResizeEvent* event) {
@@ -61,9 +80,41 @@ void QDrawWidget::resizeEvent(QResizeEvent* event) {
   updateScrollBars();
 }
 
+void QDrawWidget::wheelEvent(QWheelEvent* event) {
+  const int angleDelta = event->angleDelta().y();
+  if (image_.isNull() || !event->modifiers().testFlag(Qt::ControlModifier) || angleDelta == 0) {
+    QAbstractScrollArea::wheelEvent(event);
+    return;
+  }
+
+  const qreal previousZoom = zoomFactor_;
+  const qreal wheelSteps = static_cast<qreal>(angleDelta) / wheelStepAngle;
+  zoomFactor_ =
+      std::clamp(previousZoom * std::pow(zoomPerWheelStep, wheelSteps), minimumZoom, maximumZoom);
+
+  if (qFuzzyCompare(zoomFactor_, previousZoom)) {
+    event->accept();
+    return;
+  }
+
+  // Keeping the scrollbar offsets unchanged makes the image's top-left corner the zoom anchor.
+  updateScrollBars();
+  viewport()->update();
+  event->accept();
+}
+
+QSize QDrawWidget::scaledImageSize() const {
+  if (image_.isNull()) {
+    return {};
+  }
+
+  return {std::max(1, qRound(static_cast<qreal>(image_.width()) * zoomFactor_)),
+          std::max(1, qRound(static_cast<qreal>(image_.height()) * zoomFactor_))};
+}
+
 void QDrawWidget::updateScrollBars() {
   const QSize pageSize = viewport()->size();
-  const QSize imageSize = image_.size();
+  const QSize imageSize = scaledImageSize();
   const int horizontalMaximum = std::max(0, imageSize.width() - pageSize.width());
   const int verticalMaximum = std::max(0, imageSize.height() - pageSize.height());
 
