@@ -25,8 +25,18 @@ endif()
 
 add_library(
   quickshot_ui STATIC
-  src/main_window.cpp src/qdrawwidget.cpp include/quickshot/main_window.hpp
-  include/quickshot/qdrawwidget.hpp)
+  src/ellipse.cpp
+  src/main_window.cpp
+  src/qdrawwidget.cpp
+  src/rectangle.cpp
+  src/shape.cpp
+  src/size_handle.cpp
+  include/quickshot/ellipse.hpp
+  include/quickshot/main_window.hpp
+  include/quickshot/qdrawwidget.hpp
+  include/quickshot/rectangle.hpp
+  include/quickshot/shape.hpp
+  include/quickshot/size_handle.hpp)
 target_include_directories(quickshot_ui PUBLIC include)
 target_link_libraries(quickshot_ui PUBLIC Qt6::Svg Qt6::Widgets)
 target_compile_features(quickshot_ui PUBLIC cxx_std_20)
@@ -60,7 +70,11 @@ if(BUILD_TESTING)
   qt_add_executable(quickshot_tests tests/main_window_test.cpp)
   target_link_libraries(quickshot_tests PRIVATE quickshot_ui Qt6::Test)
 
+  qt_add_executable(shape_tests tests/shape_test.cpp)
+  target_link_libraries(shape_tests PRIVATE quickshot_ui Qt6::Test)
+
   add_test(NAME quickshot_tests COMMAND quickshot_tests)
-  set_tests_properties(quickshot_tests PROPERTIES ENVIRONMENT
-                                                  "QT_QPA_PLATFORM=offscreen")
+  add_test(NAME shape_tests COMMAND shape_tests)
+  set_tests_properties(quickshot_tests shape_tests
+                       PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
