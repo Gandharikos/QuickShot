@@ -29,7 +29,8 @@ development shell automatically and installs the configured Git hooks.
 Use **Open** to load an image. The rotate-left and rotate-right actions become available after an
 image loads successfully. Hold **Ctrl** and use the mouse wheel to zoom from the image's top-left
 corner, or edit the toolbar factor with its arrows or mouse wheel. The zoom range is 10% to 800%.
-A normal mouse wheel over the image continues to scroll it.
+A normal mouse wheel over the image continues to scroll it. Open and ROI save dialogs remember
+their most recently used directories independently.
 
 Use **Rectangle** or **Ellipse** to draw image-coordinate ROIs. Drag a shape to move it or use one of
 its eight handles to resize it. The selected shape is red and unselected shapes are white.

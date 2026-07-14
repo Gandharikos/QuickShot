@@ -7,14 +7,18 @@
 #include <QColor>
 #include <QContextMenuEvent>
 #include <QCoreApplication>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QImage>
 #include <QLineF>
 #include <QMenu>
 #include <QPointF>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
@@ -115,6 +119,7 @@ private slots:
   void hasExpectedTitle();
   void hasUsefulDefaultSize();
   void providesImageControls();
+  void remembersLastOpenDirectory();
   void synchronizesToolbarZoomControl();
   void enablesAndRunsRotationActions();
   void createsMovesAndResizesShapes();
@@ -188,6 +193,73 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(toolbarActions.at(5)->isSeparator());
   QCOMPARE(toolbarActions.at(6), rectangleAction);
   QCOMPARE(toolbarActions.at(7), ellipseAction);
+}
+
+void MainWindowTest::remembersLastOpenDirectory() {
+  constexpr auto settingsKey = "image/lastOpenDirectory";
+  QSettings settings;
+  const bool hadPreviousValue = settings.contains(QString::fromLatin1(settingsKey));
+  const QVariant previousValue = settings.value(QString::fromLatin1(settingsKey));
+  settings.remove(QString::fromLatin1(settingsKey));
+  settings.sync();
+
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+  const QString imageDirectory = temporaryDirectory.filePath("images");
+  QVERIFY(QDir{}.mkpath(imageDirectory));
+  QImage sourceImage({20, 20}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::red);
+  const QString imagePath = QDir{imageDirectory}.filePath("remember.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::MainWindow window;
+  auto* openButton = window.findChild<QPushButton*>("openButton");
+  QVERIFY(openButton != nullptr);
+  window.show();
+  QCoreApplication::processEvents();
+
+  bool firstDialogFound = false;
+  QTimer::singleShot(0, [&firstDialogFound, &imagePath]() {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog == nullptr) {
+      return;
+    }
+    firstDialogFound = true;
+    dialog->selectFile(imagePath);
+    QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+  });
+  QTest::mouseClick(openButton, Qt::LeftButton);
+  QCoreApplication::processEvents();
+
+  settings.sync();
+  const QString savedDirectory = settings.value(QString::fromLatin1(settingsKey)).toString();
+  bool secondDialogFound = false;
+  QString secondDialogDirectory;
+  QTimer::singleShot(0, [&secondDialogFound, &secondDialogDirectory]() {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog == nullptr) {
+      return;
+    }
+    secondDialogFound = true;
+    secondDialogDirectory = dialog->directory().absolutePath();
+    dialog->reject();
+  });
+  QTest::mouseClick(openButton, Qt::LeftButton);
+  QCoreApplication::processEvents();
+
+  if (hadPreviousValue) {
+    settings.setValue(QString::fromLatin1(settingsKey), previousValue);
+  } else {
+    settings.remove(QString::fromLatin1(settingsKey));
+  }
+  settings.sync();
+
+  QVERIFY(firstDialogFound);
+  QCOMPARE(QFileInfo{savedDirectory}.canonicalFilePath(),
+           QFileInfo{imageDirectory}.canonicalFilePath());
+  QVERIFY(secondDialogFound);
+  QCOMPARE(QFileInfo{secondDialogDirectory}.canonicalFilePath(),
+           QFileInfo{imageDirectory}.canonicalFilePath());
 }
 
 void MainWindowTest::synchronizesToolbarZoomControl() {

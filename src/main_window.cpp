@@ -4,14 +4,18 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QIcon>
 #include <QImageReader>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QStringList>
 #include <QSvgRenderer>
 #include <QToolBar>
@@ -19,6 +23,23 @@
 namespace quickshot {
 
 namespace {
+
+constexpr auto lastOpenDirectoryKey = "image/lastOpenDirectory";
+
+QString defaultOpenDirectory() {
+  QString directory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+  if (directory.isEmpty()) {
+    directory = QDir::homePath();
+  }
+  return directory;
+}
+
+QString lastOpenDirectory() {
+  const QString savedDirectory =
+      QSettings{}.value(QString::fromLatin1(lastOpenDirectoryKey)).toString();
+  return !savedDirectory.isEmpty() && QDir{savedDirectory}.exists() ? savedDirectory
+                                                                    : defaultOpenDirectory();
+}
 
 QString imageFilter() {
   QStringList patterns;
@@ -127,7 +148,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
 }
 
 void MainWindow::openImage() {
-  const QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image"), {}, imageFilter());
+  const QString fileName =
+      QFileDialog::getOpenFileName(this, tr("Open Image"), lastOpenDirectory(), imageFilter());
   if (fileName.isEmpty()) {
     return;
   }
@@ -135,7 +157,11 @@ void MainWindow::openImage() {
   if (!drawWidget_->loadImage(fileName)) {
     QMessageBox::warning(this, tr("Invalid Image"),
                          tr("The selected file is not a supported image."));
+    return;
   }
+
+  QSettings{}.setValue(QString::fromLatin1(lastOpenDirectoryKey),
+                       QFileInfo{fileName}.absolutePath());
 }
 
 } // namespace quickshot
