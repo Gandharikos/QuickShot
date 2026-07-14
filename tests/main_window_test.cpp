@@ -7,6 +7,7 @@
 #include <QColor>
 #include <QContextMenuEvent>
 #include <QCoreApplication>
+#include <QDoubleSpinBox>
 #include <QFile>
 #include <QImage>
 #include <QMenu>
@@ -27,6 +28,15 @@ void sendControlWheel(quickshot::QDrawWidget& drawWidget, int angleDelta,
   QWheelEvent event{position,     globalPosition,      QPoint{},          QPoint{0, angleDelta},
                     Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false};
   QCoreApplication::sendEvent(drawWidget.viewport(), &event);
+  QCoreApplication::processEvents();
+}
+
+void sendWheel(QWidget& widget, int angleDelta) {
+  const QPointF position{widget.rect().center()};
+  const QPoint globalPosition = widget.mapToGlobal(position.toPoint());
+  QWheelEvent event{position,     globalPosition, QPoint{},          QPoint{0, angleDelta},
+                    Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false};
+  QCoreApplication::sendEvent(&widget, &event);
   QCoreApplication::processEvents();
 }
 
@@ -103,6 +113,7 @@ private slots:
   void hasExpectedTitle();
   void hasUsefulDefaultSize();
   void providesImageControls();
+  void synchronizesToolbarZoomControl();
   void enablesAndRunsRotationActions();
   void createsMovesAndResizesShapes();
   void hidesInactiveHandlesWhileResizing();
@@ -135,6 +146,7 @@ void MainWindowTest::providesImageControls() {
   const auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
   const auto* rectangleAction = window.findChild<QAction*>("rectangleAction");
   const auto* ellipseAction = window.findChild<QAction*>("ellipseAction");
+  const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
 
   QVERIFY(openButton != nullptr);
   QCOMPARE(openButton->text(), QStringLiteral("Open"));
@@ -145,6 +157,7 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(rotateRightAction != nullptr);
   QVERIFY(rectangleAction != nullptr);
   QVERIFY(ellipseAction != nullptr);
+  QVERIFY(zoomFactorSpinBox != nullptr);
   QCOMPARE(rotateLeftAction->text(), QStringLiteral("Rotate Left"));
   QCOMPARE(rotateRightAction->text(), QStringLiteral("Rotate Right"));
   QVERIFY(!rotateLeftAction->icon().isNull());
@@ -155,15 +168,55 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(ellipseAction->isCheckable());
   QVERIFY(!rectangleAction->isEnabled());
   QVERIFY(!ellipseAction->isEnabled());
+  QVERIFY(!zoomFactorSpinBox->isEnabled());
+  QCOMPARE(zoomFactorSpinBox->value(), 1.0);
+  QCOMPARE(zoomFactorSpinBox->minimum(), 0.1);
+  QCOMPARE(zoomFactorSpinBox->maximum(), 8.0);
 
   const QList<QAction*> toolbarActions = toolbar->actions();
-  QCOMPARE(toolbarActions.size(), qsizetype{7});
+  QCOMPARE(toolbarActions.size(), qsizetype{8});
   QVERIFY(toolbarActions.at(1)->isSeparator());
   QCOMPARE(toolbarActions.at(2), rotateLeftAction);
   QCOMPARE(toolbarActions.at(3), rotateRightAction);
-  QVERIFY(toolbarActions.at(4)->isSeparator());
-  QCOMPARE(toolbarActions.at(5), rectangleAction);
-  QCOMPARE(toolbarActions.at(6), ellipseAction);
+  QCOMPARE(toolbar->widgetForAction(toolbarActions.at(4)), zoomFactorSpinBox);
+  QVERIFY(toolbarActions.at(5)->isSeparator());
+  QCOMPARE(toolbarActions.at(6), rectangleAction);
+  QCOMPARE(toolbarActions.at(7), ellipseAction);
+}
+
+void MainWindowTest::synchronizesToolbarZoomControl() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("toolbar-zoom.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::MainWindow window;
+  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
+  QVERIFY(drawWidget != nullptr);
+  QVERIFY(zoomFactorSpinBox != nullptr);
+  window.show();
+  QCoreApplication::processEvents();
+  QVERIFY(drawWidget->loadImage(imagePath));
+
+  QVERIFY(zoomFactorSpinBox->isEnabled());
+  zoomFactorSpinBox->clearFocus();
+  sendWheel(*zoomFactorSpinBox, 120);
+  QCOMPARE(zoomFactorSpinBox->value(), 1.1);
+  QCOMPARE(drawWidget->zoomFactor(), 1.1);
+
+  zoomFactorSpinBox->setValue(2.5);
+  QCOMPARE(drawWidget->zoomFactor(), 2.5);
+
+  sendControlWheel(*drawWidget, 120);
+  QCOMPARE(zoomFactorSpinBox->value(), drawWidget->zoomFactor());
+
+  QVERIFY(drawWidget->loadImage(imagePath));
+  QCOMPARE(drawWidget->zoomFactor(), 1.0);
+  QCOMPARE(zoomFactorSpinBox->value(), 1.0);
 }
 
 void MainWindowTest::enablesAndRunsRotationActions() {

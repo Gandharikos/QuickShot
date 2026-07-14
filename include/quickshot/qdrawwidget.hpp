@@ -35,6 +35,7 @@ public:
   [[nodiscard]] QSize sizeHint() const override;
   [[nodiscard]] qsizetype shapeCount() const noexcept;
   [[nodiscard]] const ::quickshot::Shape* shapeAt(qsizetype index) const;
+  void setZoomFactor(qreal factor);
   void setRectangleCreationMode(bool enabled);
   void setEllipseCreationMode(bool enabled);
   void rotateLeft();
@@ -42,6 +43,7 @@ public:
 
 signals:
   void imageAvailabilityChanged(bool available);
+  void zoomFactorChanged(qreal factor);
 
 protected:
   void contextMenuEvent(QContextMenuEvent* event) override;

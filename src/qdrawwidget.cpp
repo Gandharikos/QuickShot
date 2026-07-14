@@ -98,11 +98,15 @@ bool QDrawWidget::loadImage(const QString& fileName) {
   selectedShape_ = nullptr;
   dragMode_ = DragMode::None;
   activeHandle_.reset();
+  const qreal previousZoom = zoomFactor_;
   zoomFactor_ = 1.0;
   horizontalScrollBar()->setValue(0);
   verticalScrollBar()->setValue(0);
   updateScrollBars();
   viewport()->update();
+  if (!qFuzzyCompare(previousZoom, zoomFactor_)) {
+    emit zoomFactorChanged(zoomFactor_);
+  }
   emit imageAvailabilityChanged(true);
   return true;
 }
@@ -124,6 +128,18 @@ const ::quickshot::Shape* QDrawWidget::shapeAt(qsizetype index) const {
 
   const auto position = static_cast<std::size_t>(index);
   return position < shapes_.size() ? shapes_[position].get() : nullptr;
+}
+
+void QDrawWidget::setZoomFactor(qreal factor) {
+  const qreal boundedFactor = std::clamp(factor, minimumZoom, maximumZoom);
+  if (qFuzzyCompare(zoomFactor_, boundedFactor)) {
+    return;
+  }
+
+  zoomFactor_ = boundedFactor;
+  updateScrollBars();
+  viewport()->update();
+  emit zoomFactorChanged(zoomFactor_);
 }
 
 void QDrawWidget::setRectangleCreationMode(bool enabled) {
@@ -329,8 +345,7 @@ void QDrawWidget::wheelEvent(QWheelEvent* event) {
   const qreal wheelSteps = static_cast<qreal>(angleDelta) / wheelStepAngle;
   // Multiplication gives every notch the same relative visual change, while clamp keeps the
   // resulting scale within the supported 10%-800% range.
-  zoomFactor_ =
-      std::clamp(previousZoom * std::pow(zoomPerWheelStep, wheelSteps), minimumZoom, maximumZoom);
+  setZoomFactor(previousZoom * std::pow(zoomPerWheelStep, wheelSteps));
 
   // Compare floating-point values approximately; clamp can leave the scale unchanged at a limit.
   if (qFuzzyCompare(zoomFactor_, previousZoom)) {
@@ -339,8 +354,6 @@ void QDrawWidget::wheelEvent(QWheelEvent* event) {
   }
 
   // Keeping the scrollbar offsets unchanged makes the image's top-left corner the zoom anchor.
-  updateScrollBars();
-  viewport()->update();
   event->accept();
 }
 

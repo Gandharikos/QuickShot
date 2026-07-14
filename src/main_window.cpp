@@ -4,6 +4,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QIcon>
 #include <QImageReader>
@@ -71,6 +72,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   rotateLeftAction->setEnabled(false);
   rotateRightAction->setEnabled(false);
 
+  auto* zoomFactorSpinBox = new QDoubleSpinBox(toolbar);
+  zoomFactorSpinBox->setObjectName("zoomFactorSpinBox");
+  zoomFactorSpinBox->setRange(0.1, 8.0);
+  zoomFactorSpinBox->setSingleStep(0.1);
+  zoomFactorSpinBox->setDecimals(2);
+  zoomFactorSpinBox->setValue(1.0);
+  zoomFactorSpinBox->setSuffix(QStringLiteral("×"));
+  zoomFactorSpinBox->setEnabled(false);
+  toolbar->addWidget(zoomFactorSpinBox);
+
   toolbar->addSeparator();
   auto* shapeActions = new QActionGroup(toolbar);
   shapeActions->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
@@ -88,6 +99,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
   connect(rotateLeftAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateLeft);
   connect(rotateRightAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateRight);
+  connect(zoomFactorSpinBox, &QDoubleSpinBox::valueChanged, drawWidget_,
+          &QDrawWidget::setZoomFactor);
+  connect(drawWidget_, &QDrawWidget::zoomFactorChanged, zoomFactorSpinBox,
+          &QDoubleSpinBox::setValue);
   connect(rectangleAction, &QAction::triggered, drawWidget_,
           &QDrawWidget::setRectangleCreationMode);
   connect(ellipseAction, &QAction::triggered, drawWidget_, &QDrawWidget::setEllipseCreationMode);
@@ -95,6 +110,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateRightAction,
           &QAction::setEnabled);
+  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, zoomFactorSpinBox,
+          &QDoubleSpinBox::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rectangleAction,
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, ellipseAction, &QAction::setEnabled);
