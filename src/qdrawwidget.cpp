@@ -383,8 +383,8 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
   QPainter painter(viewport());
   const QRectF viewportRect{0.0, 0.0, static_cast<qreal>(viewport()->width()),
                             static_cast<qreal>(viewport()->height())};
-  // Uncovered viewport pixels remain black at every zoom level.
-  painter.fillRect(viewportRect, Qt::black);
+  // Uncovered viewport pixels use the application's default light canvas color.
+  painter.fillRect(viewportRect, Qt::white);
 
   if (image_.isNull()) {
     return;

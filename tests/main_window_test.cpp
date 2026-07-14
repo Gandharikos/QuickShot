@@ -55,10 +55,11 @@ QImage renderViewport(const quickshot::QDrawWidget& drawWidget) {
   return renderedImage;
 }
 
-qsizetype colorPixelCount(const QImage& image, const QColor& color) {
+qsizetype colorPixelCount(const QImage& image, const QColor& color, const QRect& area) {
   qsizetype count = 0;
-  for (int y = 0; y < image.height(); ++y) {
-    for (int x = 0; x < image.width(); ++x) {
+  const QRect boundedArea = area.intersected(image.rect());
+  for (int y = boundedArea.top(); y <= boundedArea.bottom(); ++y) {
+    for (int x = boundedArea.left(); x <= boundedArea.right(); ++x) {
       if (image.pixelColor(x, y) == color) {
         ++count;
       }
@@ -155,6 +156,7 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(drawWidget != nullptr);
   QCOMPARE(window.centralWidget(), drawWidget);
   QVERIFY(toolbar != nullptr);
+  QCOMPARE(toolbar->toolButtonStyle(), Qt::ToolButtonIconOnly);
   QVERIFY(rotateLeftAction != nullptr);
   QVERIFY(rotateRightAction != nullptr);
   QVERIFY(rectangleAction != nullptr);
@@ -168,6 +170,8 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(!rotateRightAction->isEnabled());
   QVERIFY(rectangleAction->isCheckable());
   QVERIFY(ellipseAction->isCheckable());
+  QVERIFY(!rectangleAction->icon().isNull());
+  QVERIFY(!ellipseAction->icon().isNull());
   QVERIFY(!rectangleAction->isEnabled());
   QVERIFY(!ellipseAction->isEnabled());
   QVERIFY(!zoomFactorSpinBox->isEnabled());
@@ -326,17 +330,21 @@ void MainWindowTest::hidesInactiveHandlesWhileResizing() {
   drawWidget.setEllipseCreationMode(true);
   drag(drawWidget.viewport(), {40, 30}, {140, 110});
 
-  const qsizetype restingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  const QRect imageArea{0, 0, sourceImage.width(), sourceImage.height()};
+  const qsizetype restingWhitePixels =
+      colorPixelCount(renderViewport(drawWidget), Qt::white, imageArea);
   QVERIFY(restingWhitePixels > 0);
 
   QTest::mousePress(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {140, 110});
   QCoreApplication::processEvents();
-  const qsizetype draggingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  const qsizetype draggingWhitePixels =
+      colorPixelCount(renderViewport(drawWidget), Qt::white, imageArea);
   QVERIFY(draggingWhitePixels * 2 < restingWhitePixels);
 
   QTest::mouseRelease(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {140, 110});
   QCoreApplication::processEvents();
-  const qsizetype releasedWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  const qsizetype releasedWhitePixels =
+      colorPixelCount(renderViewport(drawWidget), Qt::white, imageArea);
   QCOMPARE(releasedWhitePixels, restingWhitePixels);
 }
 
@@ -392,11 +400,14 @@ void MainWindowTest::resizesAndRotatesFromShapeHandles() {
   QCoreApplication::processEvents();
   QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::SizeHorCursor);
 
-  const qsizetype restingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  const QRect imageArea{0, 0, sourceImage.width(), sourceImage.height()};
+  const qsizetype restingWhitePixels =
+      colorPixelCount(renderViewport(drawWidget), Qt::white, imageArea);
   QTest::mousePress(drawWidget.viewport(), Qt::RightButton, Qt::NoModifier, {100, 60});
   QCoreApplication::processEvents();
   QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::BitmapCursor);
-  const qsizetype rotatingWhitePixels = colorPixelCount(renderViewport(drawWidget), Qt::white);
+  const qsizetype rotatingWhitePixels =
+      colorPixelCount(renderViewport(drawWidget), Qt::white, imageArea);
   QVERIFY(rotatingWhitePixels < restingWhitePixels);
   QTest::mouseMove(drawWidget.viewport(), {70, 90});
   QTest::mouseRelease(drawWidget.viewport(), Qt::RightButton, Qt::NoModifier, {70, 90});
@@ -463,9 +474,9 @@ void MainWindowTest::drawsImageAtOriginalSize() {
 
   QCOMPARE(renderedImage.pixelColor(0, 0), QColor(Qt::red));
   QCOMPARE(renderedImage.pixelColor(39, 19), QColor(Qt::red));
-  QCOMPARE(renderedImage.pixelColor(40, 19), QColor(Qt::black));
-  QCOMPARE(renderedImage.pixelColor(39, 20), QColor(Qt::black));
-  QCOMPARE(renderedImage.pixelColor(99, 99), QColor(Qt::black));
+  QCOMPARE(renderedImage.pixelColor(40, 19), QColor(Qt::white));
+  QCOMPARE(renderedImage.pixelColor(39, 20), QColor(Qt::white));
+  QCOMPARE(renderedImage.pixelColor(99, 99), QColor(Qt::white));
   QCOMPARE(drawWidget.horizontalScrollBar()->maximum(), 0);
   QCOMPARE(drawWidget.verticalScrollBar()->maximum(), 0);
 }

@@ -51,6 +51,8 @@ qt_add_resources(
   BASE
   "assets/icons"
   FILES
+  assets/icons/ellipse.svg
+  assets/icons/rectangle.svg
   assets/icons/rotate-cursor.svg
   assets/icons/rotate-left.svg
   assets/icons/rotate-right.svg)

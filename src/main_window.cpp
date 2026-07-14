@@ -52,6 +52,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
 
   toolbar->setObjectName("mainToolBar");
   toolbar->setMovable(false);
+  toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
   openButton->setObjectName("openButton");
   drawWidget_->setObjectName("drawWidget");
 
@@ -85,8 +86,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   toolbar->addSeparator();
   auto* shapeActions = new QActionGroup(toolbar);
   shapeActions->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
-  auto* rectangleAction = toolbar->addAction(tr("Rectangle"));
-  auto* ellipseAction = toolbar->addAction(tr("Ellipse"));
+  auto* rectangleAction = toolbar->addAction(
+      QIcon::fromTheme(QStringLiteral("draw-rectangle"),
+                       svgIcon(QStringLiteral(":/quickshot/icons/rectangle.svg"))),
+      tr("Rectangle"));
+  auto* ellipseAction =
+      toolbar->addAction(QIcon::fromTheme(QStringLiteral("draw-ellipse"),
+                                          svgIcon(QStringLiteral(":/quickshot/icons/ellipse.svg"))),
+                         tr("Ellipse"));
   rectangleAction->setObjectName("rectangleAction");
   ellipseAction->setObjectName("ellipseAction");
   rectangleAction->setCheckable(true);

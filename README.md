@@ -33,10 +33,9 @@ A normal mouse wheel over the image continues to scroll it.
 
 Use **Rectangle** or **Ellipse** to draw image-coordinate ROIs. Drag a shape to move it or use one of
 its eight handles to resize it. The selected shape is red and unselected shapes are white.
+Left-drag any handle to resize, or right-drag any handle to rotate around the shape's center.
 Right-click a shape to save, clone, or delete it. Right-click outside all shapes to save or delete
-all ROIs. Hold **Alt** to reveal each shape's green rotation handle, then right-drag that handle to
-rotate around the shape's center. Saved files use PNG; ellipse pixels outside the shape are
-transparent.
+all ROIs. Saved files use PNG; ellipse pixels outside the shape are transparent.
 
 ## Nix outputs
 
