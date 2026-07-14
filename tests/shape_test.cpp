@@ -1,9 +1,14 @@
 #include "quickshot/ellipse.hpp"
 #include "quickshot/rectangle.hpp"
+#include "quickshot/roi_exporter.hpp"
 #include "quickshot/size_handle.hpp"
 
+#include <QColor>
+#include <QImage>
+#include <QImageReader>
 #include <QPointF>
 #include <QRectF>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTransform>
 
@@ -15,6 +20,9 @@ private slots:
   void ellipseProvidesCardinalHandles();
   void movesAndTransformsGeometry();
   void sizeHandleProvidesHitAreaAndCursor();
+  void extractsRectangleRoi();
+  void extractsTransparentEllipseRoi();
+  void savesRoiAsPng();
 };
 
 void ShapeTest::rectangleProvidesEightHandles() {
@@ -62,6 +70,48 @@ void ShapeTest::sizeHandleProvidesHitAreaAndCursor() {
   QCOMPARE(topHandle.cursorShape(), Qt::SizeVerCursor);
   QCOMPARE(bottomRightHandle.center(bounds), QPointF(40.0, 60.0));
   QCOMPARE(bottomRightHandle.cursorShape(), Qt::SizeFDiagCursor);
+}
+
+void ShapeTest::extractsRectangleRoi() {
+  QImage image{{20, 20}, QImage::Format_RGB32};
+  image.fill(Qt::red);
+  const quickshot::Rectangle rectangle{QRectF{2.0, 3.0, 5.0, 4.0}};
+
+  const QImage roi = quickshot::extractRoi(image, rectangle);
+
+  QCOMPARE(roi.size(), QSize(5, 4));
+  QCOMPARE(roi.pixelColor(0, 0), QColor(Qt::red));
+  QCOMPARE(roi.pixelColor(4, 3), QColor(Qt::red));
+}
+
+void ShapeTest::extractsTransparentEllipseRoi() {
+  QImage image{{20, 20}, QImage::Format_RGB32};
+  image.fill(Qt::red);
+  const quickshot::Ellipse ellipse{QRectF{2.0, 2.0, 10.0, 10.0}};
+
+  const QImage roi = quickshot::extractRoi(image, ellipse);
+
+  QCOMPARE(roi.size(), QSize(10, 10));
+  QCOMPARE(roi.pixelColor(0, 0).alpha(), 0);
+  QCOMPARE(roi.pixelColor(5, 5), QColor(Qt::red));
+}
+
+void ShapeTest::savesRoiAsPng() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage image{{20, 20}, QImage::Format_RGB32};
+  image.fill(Qt::blue);
+  const quickshot::Rectangle rectangle{QRectF{2.0, 3.0, 5.0, 4.0}};
+  const QString fileName = temporaryDirectory.filePath("roi.png");
+  QString errorMessage;
+
+  QVERIFY(quickshot::saveRoiPng(image, rectangle, fileName, &errorMessage));
+  QVERIFY(errorMessage.isEmpty());
+
+  QImageReader reader{fileName};
+  QCOMPARE(reader.format(), QByteArray("png"));
+  QCOMPARE(reader.read().size(), QSize(5, 4));
 }
 
 QTEST_APPLESS_MAIN(ShapeTest)

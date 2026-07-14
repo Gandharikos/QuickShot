@@ -2,12 +2,20 @@
 
 #include "quickshot/ellipse.hpp"
 #include "quickshot/rectangle.hpp"
+#include "quickshot/roi_exporter.hpp"
 #include "quickshot/shape.hpp"
 
+#include <QAction>
 #include <QBrush>
 #include <QColor>
+#include <QContextMenuEvent>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QImageReader>
+#include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
@@ -15,12 +23,15 @@
 #include <QRectF>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QSettings>
 #include <QSize>
+#include <QStandardPaths>
 #include <QTransform>
 #include <QWheelEvent>
 #include <QtMath>
 #include <algorithm>
 #include <cmath>
+#include <ranges>
 #include <utility>
 
 namespace quickshot {
@@ -33,12 +44,40 @@ constexpr qreal wheelStepAngle = 120.0;
 constexpr qreal handleSize = 8.0;
 constexpr qreal minimumShapeSize = 1.0;
 
+QString pngFileName(const QString& selectedFileName) {
+  const QFileInfo selectedFile{selectedFileName};
+  if (selectedFile.suffix().compare(QStringLiteral("png"), Qt::CaseInsensitive) == 0) {
+    return selectedFile.absoluteFilePath();
+  }
+
+  const QString baseName =
+      selectedFile.suffix().isEmpty() ? selectedFile.fileName() : selectedFile.completeBaseName();
+  return selectedFile.dir().filePath(baseName + QStringLiteral(".png"));
+}
+
+QString numberedPngFileName(const QString& baseFileName, std::size_t index) {
+  const QFileInfo baseFile{baseFileName};
+  const QString numberedName = QStringLiteral("%1_%2.png")
+                                   .arg(baseFile.completeBaseName())
+                                   .arg(static_cast<qulonglong>(index) + 1ULL, 3, 10, QChar{'0'});
+  return baseFile.dir().filePath(numberedName);
+}
+
 } // namespace
 
 QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent) {
   setFrameShape(QFrame::NoFrame);
   viewport()->setAutoFillBackground(false);
   viewport()->setMouseTracking(true);
+
+  QSettings settings;
+  lastSaveDirectory_ = settings.value(QStringLiteral("roi/lastSaveDirectory")).toString();
+  if (lastSaveDirectory_.isEmpty()) {
+    lastSaveDirectory_ = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+  }
+  if (lastSaveDirectory_.isEmpty()) {
+    lastSaveDirectory_ = QDir::homePath();
+  }
 }
 
 QDrawWidget::~QDrawWidget() = default;
@@ -96,6 +135,33 @@ void QDrawWidget::setEllipseCreationMode(bool enabled) {
 void QDrawWidget::rotateLeft() { rotateImage(-90.0); }
 
 void QDrawWidget::rotateRight() { rotateImage(90.0); }
+
+void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
+  const QPointF point = imagePosition(event->pos());
+  ::quickshot::Shape* targetShape = shapeAt(point);
+
+  QMenu menu{viewport()};
+  QAction* saveAction = menu.addAction(tr("Save ROI"));
+  saveAction->setObjectName("saveRoiAction");
+  saveAction->setEnabled(targetShape != nullptr || !shapes_.empty());
+
+  if (menu.exec(event->globalPos()) == saveAction) {
+    std::vector<const ::quickshot::Shape*> targets;
+    if (targetShape != nullptr) {
+      selectedShape_ = targetShape;
+      targets.push_back(targetShape);
+      viewport()->update();
+    } else {
+      targets.reserve(shapes_.size());
+      for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+        targets.push_back(shape.get());
+      }
+    }
+    saveRois(targets);
+  }
+
+  event->accept();
+}
 
 void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
@@ -384,6 +450,51 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
     painter.drawRect(handle.hitRect(selectedShape_->boundingRect(), imageHandleSize));
   }
   painter.restore();
+}
+
+void QDrawWidget::saveRois(const std::vector<const ::quickshot::Shape*>& targets) {
+  if (targets.empty()) {
+    return;
+  }
+
+  const QString selectedFileName = QFileDialog::getSaveFileName(
+      this, tr("Save ROI"), QDir{lastSaveDirectory_}.filePath(QStringLiteral("roi.png")),
+      tr("PNG Images (*.png)"));
+  if (selectedFileName.isEmpty()) {
+    return;
+  }
+
+  const QString baseFileName = pngFileName(selectedFileName);
+  lastSaveDirectory_ = QFileInfo{baseFileName}.absolutePath();
+  QSettings settings;
+  settings.setValue(QStringLiteral("roi/lastSaveDirectory"), lastSaveDirectory_);
+
+  std::vector<QString> outputFileNames;
+  outputFileNames.reserve(targets.size());
+  for (std::size_t index = 0; index < targets.size(); ++index) {
+    outputFileNames.push_back(targets.size() == 1 ? baseFileName
+                                                  : numberedPngFileName(baseFileName, index));
+  }
+
+  const bool outputExists = std::ranges::any_of(
+      outputFileNames, [](const QString& fileName) { return QFileInfo::exists(fileName); });
+  if (outputExists &&
+      QMessageBox::question(this, tr("Overwrite ROI Files"),
+                            tr("One or more ROI files already exist. Overwrite them?")) !=
+          QMessageBox::Yes) {
+    return;
+  }
+
+  for (std::size_t index = 0; index < targets.size(); ++index) {
+    QString errorMessage;
+    if (!saveRoiPng(image_, *targets[index], outputFileNames[index], &errorMessage)) {
+      QMessageBox::warning(
+          this, tr("Unable to Save ROI"),
+          tr("Could not save %1: %2")
+              .arg(QDir::toNativeSeparators(outputFileNames[index]), errorMessage));
+      return;
+    }
+  }
 }
 
 void QDrawWidget::setCreationMode(CreationMode mode, bool enabled) {

@@ -30,6 +30,7 @@ int main(int argc, char** argv) {
 
   QApplication application(argc, argv);
   QApplication::setApplicationName("Quickshot");
+  QApplication::setOrganizationName("Quickshot");
   QApplication::setApplicationVersion(QUICKSHOT_VERSION);
 
   quickshot::MainWindow window;

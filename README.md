@@ -30,6 +30,10 @@ Use **Open** to load an image. The rotate-left and rotate-right actions become a
 image loads successfully. Hold **Ctrl** and use the mouse wheel to zoom from the image's top-left
 corner; the zoom range is 10% to 800%. A normal mouse wheel continues to scroll the image.
 
+Use **Rectangle** or **Ellipse** to draw image-coordinate ROIs. Drag a shape to move it or drag its
+handles to resize it. Right-click a shape to save that ROI as PNG, or right-click outside all shapes
+to save every ROI with numbered file names. Ellipse pixels outside the shape are transparent.
+
 ## Nix outputs
 
 ```console

@@ -29,12 +29,14 @@ add_library(
   src/main_window.cpp
   src/qdrawwidget.cpp
   src/rectangle.cpp
+  src/roi_exporter.cpp
   src/shape.cpp
   src/size_handle.cpp
   include/quickshot/ellipse.hpp
   include/quickshot/main_window.hpp
   include/quickshot/qdrawwidget.hpp
   include/quickshot/rectangle.hpp
+  include/quickshot/roi_exporter.hpp
   include/quickshot/shape.hpp
   include/quickshot/size_handle.hpp)
 target_include_directories(quickshot_ui PUBLIC include)

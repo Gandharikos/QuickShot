@@ -4,10 +4,12 @@
 #include <QImage>
 #include <QPointF>
 #include <QRectF>
+#include <QString>
 #include <memory>
 #include <optional>
 #include <vector>
 
+class QContextMenuEvent;
 class QMouseEvent;
 class QPainter;
 class QPaintEvent;
@@ -42,6 +44,7 @@ signals:
   void imageAvailabilityChanged(bool available);
 
 protected:
+  void contextMenuEvent(QContextMenuEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
@@ -63,6 +66,7 @@ private:
   void updateHoverCursor(const QPointF& point);
   void updateDraggedShape(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
+  void saveRois(const std::vector<const ::quickshot::Shape*>& targets);
   void setCreationMode(CreationMode mode, bool enabled);
   void rotateImage(qreal degrees);
   [[nodiscard]] QSize scaledImageSize() const;
@@ -76,6 +80,7 @@ private:
   std::optional<HandlePosition> activeHandle_;
   QPointF dragStart_;
   QRectF dragStartBounds_;
+  QString lastSaveDirectory_;
   qreal zoomFactor_ = 1.0;
 };
 
