@@ -3,10 +3,11 @@
 #include <QPointF>
 #include <QRectF>
 #include <Qt>
+#include <cstdint>
 
 namespace quickshot {
 
-enum class HandlePosition {
+enum class HandlePosition : std::uint8_t {
   TopLeft,
   Top,
   TopRight,

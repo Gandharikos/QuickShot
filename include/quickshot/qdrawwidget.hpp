@@ -5,7 +5,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QString>
-#include <QTransform>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -20,8 +20,9 @@ class QWheelEvent;
 
 namespace quickshot {
 
-enum class HandlePosition;
-enum class ShapeType;
+enum class HandlePosition : std::uint8_t;
+enum class ShapeType : std::uint8_t;
+class DragState;
 class Shape;
 
 class QDrawWidget final : public QAbstractScrollArea {
@@ -56,18 +57,13 @@ protected:
   void wheelEvent(QWheelEvent* event) override;
 
 private:
-  enum class DragMode { None, Create, Move, Resize, Rotate };
-
   [[nodiscard]] QPointF imagePosition(const QPointF& viewportPosition) const;
   [[nodiscard]] QRectF imageBounds() const;
   [[nodiscard]] ::quickshot::Shape* shapeAt(const QPointF& point) const;
   [[nodiscard]] std::optional<HandlePosition> handleAt(const QPointF& point) const;
   [[nodiscard]] QRectF handleRect(const ::quickshot::Shape& shape, HandlePosition position) const;
   [[nodiscard]] QRectF constrainedMove(const QRectF& bounds, const QPointF& offset) const;
-  [[nodiscard]] QRectF resizedBounds(const QRectF& bounds, HandlePosition handle,
-                                     const QPointF& point) const;
   void updateHoverCursor(const QPointF& point);
-  void updateDraggedShape(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
   void cloneShape(const ::quickshot::Shape& shape);
   void deleteShape(const ::quickshot::Shape& shape);
@@ -81,14 +77,7 @@ private:
   std::vector<std::unique_ptr<::quickshot::Shape>> shapes_;
   ::quickshot::Shape* selectedShape_ = nullptr;
   std::optional<ShapeType> creationType_;
-  DragMode dragMode_ = DragMode::None;
-  std::optional<HandlePosition> activeHandle_;
-  QPointF dragStart_;
-  QRectF dragStartBounds_;
-  QTransform dragStartImageToShape_;
-  QPointF resizeAnchorImage_;
-  qreal dragStartRotation_ = 0.0;
-  qreal dragStartMouseAngle_ = 0.0;
+  std::unique_ptr<DragState> dragState_;
   QString lastSaveDirectory_;
   qreal zoomFactor_ = 1.0;
   bool suppressContextMenu_ = false;

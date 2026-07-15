@@ -1,5 +1,6 @@
 #include "quickshot/qdrawwidget.hpp"
 
+#include "quickshot/drag_state.hpp"
 #include "quickshot/roi_exporter.hpp"
 #include "quickshot/shape.hpp"
 
@@ -29,7 +30,6 @@
 #include <QSvgRenderer>
 #include <QTransform>
 #include <QWheelEvent>
-#include <QtMath>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -44,21 +44,7 @@ constexpr qreal maximumZoom = 8.0;
 constexpr qreal zoomPerWheelStep = 1.1;
 constexpr qreal wheelStepAngle = 120.0;
 constexpr qreal handleSize = 8.0;
-constexpr qreal minimumShapeSize = 1.0;
 constexpr qreal cloneOffset = 10.0;
-
-QTransform rotationTransform(const QRectF& bounds, qreal degrees) {
-  const QPointF center = bounds.center();
-  QTransform transformation;
-  transformation.translate(center.x(), center.y());
-  transformation.rotate(degrees);
-  transformation.translate(-center.x(), -center.y());
-  return transformation;
-}
-
-qreal mouseAngle(const QPointF& center, const QPointF& point) {
-  return qRadiansToDegrees(std::atan2(point.y() - center.y(), point.x() - center.x()));
-}
 
 QCursor rotationCursor() {
   static const QCursor cursor = []() {
@@ -120,10 +106,9 @@ bool QDrawWidget::loadImage(const QString& fileName) {
   }
 
   image_ = std::move(image);
+  dragState_.reset();
   shapes_.clear();
   selectedShape_ = nullptr;
-  dragMode_ = DragMode::None;
-  activeHandle_.reset();
   const qreal previousZoom = zoomFactor_;
   zoomFactor_ = 1.0;
   horizontalScrollBar()->setValue(0);
@@ -237,8 +222,8 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
 
 void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
-  if (dragMode_ != DragMode::None) {
-    updateDraggedShape(point);
+  if (dragState_ != nullptr) {
+    dragState_->update(point);
     viewport()->update();
     event->accept();
     return;
@@ -257,10 +242,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
   if (event->button() == Qt::RightButton) {
     if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
-      dragMode_ = DragMode::Rotate;
-      activeHandle_ = handle;
-      dragStartRotation_ = selectedShape_->rotationDegrees();
-      dragStartMouseAngle_ = mouseAngle(selectedShape_->boundingRect().center(), point);
+      dragState_ = std::make_unique<RotateState>(*selectedShape_, *handle, point);
       suppressContextMenu_ = true;
       viewport()->setCursor(rotationCursor());
       viewport()->update();
@@ -283,14 +265,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   }
 
   if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
-    dragMode_ = DragMode::Resize;
-    activeHandle_ = handle;
-    dragStart_ = point;
-    dragStartBounds_ = selectedShape_->boundingRect();
-    dragStartImageToShape_ = selectedShape_->imageTransform().inverted();
-    resizeAnchorImage_ =
-        selectedShape_->handleCenter(SizeHandle{SizeHandle::oppositePosition(*activeHandle_)});
-    dragStartRotation_ = selectedShape_->rotationDegrees();
+    dragState_ = std::make_unique<ResizeState>(*selectedShape_, *handle, imageBounds());
     viewport()->update();
     event->accept();
     return;
@@ -298,9 +273,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 
   if (::quickshot::Shape* hitShape = shapeAt(point); hitShape != nullptr) {
     selectedShape_ = hitShape;
-    dragMode_ = DragMode::Move;
-    dragStart_ = point;
-    dragStartBounds_ = selectedShape_->boundingRect();
+    dragState_ = std::make_unique<MoveState>(*selectedShape_, point, imageBounds());
     viewport()->update();
     event->accept();
     return;
@@ -313,9 +286,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 
     selectedShape_ = shape.get();
     shapes_.push_back(std::move(shape));
-    dragMode_ = DragMode::Create;
-    dragStart_ = point;
-    dragStartBounds_ = initialBounds;
+    dragState_ = std::make_unique<CreateState>(*selectedShape_, point, imageBounds());
     viewport()->update();
     event->accept();
     return;
@@ -327,24 +298,18 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void QDrawWidget::mouseReleaseEvent(QMouseEvent* event) {
-  const bool completesLeftDrag = event->button() == Qt::LeftButton && dragMode_ != DragMode::Rotate;
-  const bool completesRotation =
-      event->button() == Qt::RightButton && dragMode_ == DragMode::Rotate;
-  if (dragMode_ == DragMode::None || (!completesLeftDrag && !completesRotation)) {
+  if (dragState_ == nullptr || event->button() != dragState_->completionButton()) {
     QAbstractScrollArea::mouseReleaseEvent(event);
     return;
   }
 
-  if (dragMode_ == DragMode::Create && selectedShape_ != nullptr) {
-    const QRectF bounds = selectedShape_->boundingRect();
-    if (bounds.width() < minimumShapeSize || bounds.height() < minimumShapeSize) {
-      shapes_.pop_back();
-      selectedShape_ = nullptr;
-    }
+  const DragResult result = dragState_->finish();
+  dragState_.reset();
+  if (result == DragResult::RemoveShape) {
+    shapes_.pop_back();
+    selectedShape_ = nullptr;
   }
 
-  dragMode_ = DragMode::None;
-  activeHandle_.reset();
   updateHoverCursor(imagePosition(event->position()));
   viewport()->update();
   event->accept();
@@ -467,55 +432,7 @@ QRectF QDrawWidget::constrainedMove(const QRectF& bounds, const QPointF& offset)
   return bounds.translated(horizontalOffset, verticalOffset);
 }
 
-QRectF QDrawWidget::resizedBounds(const QRectF& bounds, HandlePosition handle,
-                                  const QPointF& point) const {
-  const QRectF limits = imageBounds();
-  qreal left = bounds.left();
-  qreal top = bounds.top();
-  qreal right = bounds.right();
-  qreal bottom = bounds.bottom();
-
-  switch (handle) {
-  case HandlePosition::TopLeft:
-  case HandlePosition::Left:
-  case HandlePosition::BottomLeft:
-    left = std::clamp(point.x(), limits.left(), right - minimumShapeSize);
-    break;
-  case HandlePosition::TopRight:
-  case HandlePosition::Right:
-  case HandlePosition::BottomRight:
-    right = std::clamp(point.x(), left + minimumShapeSize, limits.right());
-    break;
-  case HandlePosition::Top:
-  case HandlePosition::Bottom:
-    break;
-  }
-
-  switch (handle) {
-  case HandlePosition::TopLeft:
-  case HandlePosition::Top:
-  case HandlePosition::TopRight:
-    top = std::clamp(point.y(), limits.top(), bottom - minimumShapeSize);
-    break;
-  case HandlePosition::BottomRight:
-  case HandlePosition::Bottom:
-  case HandlePosition::BottomLeft:
-    bottom = std::clamp(point.y(), top + minimumShapeSize, limits.bottom());
-    break;
-  case HandlePosition::Right:
-  case HandlePosition::Left:
-    break;
-  }
-
-  return {QPointF{left, top}, QPointF{right, bottom}};
-}
-
 void QDrawWidget::updateHoverCursor(const QPointF& point) {
-  if (dragMode_ == DragMode::Rotate) {
-    viewport()->setCursor(rotationCursor());
-    return;
-  }
-
   if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
     viewport()->setCursor(SizeHandle{*handle}.cursorShape());
     return;
@@ -529,43 +446,6 @@ void QDrawWidget::updateHoverCursor(const QPointF& point) {
   viewport()->setCursor(Qt::ArrowCursor);
 }
 
-void QDrawWidget::updateDraggedShape(const QPointF& point) {
-  if (selectedShape_ == nullptr) {
-    return;
-  }
-
-  if (dragMode_ == DragMode::Create) {
-    const QPointF boundedPoint{std::clamp(point.x(), imageBounds().left(), imageBounds().right()),
-                               std::clamp(point.y(), imageBounds().top(), imageBounds().bottom())};
-    selectedShape_->setBoundingRect(QRectF{dragStart_, boundedPoint}.normalized());
-    return;
-  }
-
-  if (dragMode_ == DragMode::Move) {
-    selectedShape_->setBoundingRect(constrainedMove(dragStartBounds_, point - dragStart_));
-    return;
-  }
-
-  if (dragMode_ == DragMode::Resize && activeHandle_.has_value()) {
-    const QPointF localPoint = dragStartImageToShape_.map(point);
-    QRectF bounds = resizedBounds(dragStartBounds_, *activeHandle_, localPoint);
-    const HandlePosition anchorHandle = SizeHandle::oppositePosition(*activeHandle_);
-    const QPointF localAnchor = SizeHandle{anchorHandle}.center(bounds);
-    const QPointF mappedAnchor = rotationTransform(bounds, dragStartRotation_).map(localAnchor);
-    // A resized frame has a new center; translate it so rotation does not move
-    // the opposite handle.
-    bounds.translate(resizeAnchorImage_ - mappedAnchor);
-    selectedShape_->setBoundingRect(bounds);
-    return;
-  }
-
-  if (dragMode_ == DragMode::Rotate) {
-    const qreal currentMouseAngle = mouseAngle(selectedShape_->boundingRect().center(), point);
-    selectedShape_->setRotationDegrees(dragStartRotation_ + currentMouseAngle -
-                                       dragStartMouseAngle_);
-  }
-}
-
 void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
   if (selectedShape_ == nullptr) {
     return;
@@ -576,9 +456,10 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
   painter.save();
   painter.setPen(handlePen);
   painter.setBrush(QBrush{Qt::white});
+  const std::optional<HandlePosition> activeHandle =
+      dragState_ != nullptr ? dragState_->activeHandle() : std::nullopt;
   for (const SizeHandle& handle : selectedShape_->handles()) {
-    if ((dragMode_ == DragMode::Resize || dragMode_ == DragMode::Rotate) &&
-        activeHandle_.has_value() && handle.position() != *activeHandle_) {
+    if (activeHandle.has_value() && handle.position() != *activeHandle) {
       continue;
     }
     painter.drawRect(handleRect(*selectedShape_, handle.position()));
@@ -618,17 +499,15 @@ void QDrawWidget::deleteShape(const ::quickshot::Shape& shape) {
   if (selectedShape_ == shapeToDelete->get()) {
     selectedShape_ = nullptr;
   }
+  dragState_.reset();
   shapes_.erase(shapeToDelete);
-  activeHandle_.reset();
-  dragMode_ = DragMode::None;
   viewport()->update();
 }
 
 void QDrawWidget::deleteAllShapes() {
+  dragState_.reset();
   shapes_.clear();
   selectedShape_ = nullptr;
-  activeHandle_.reset();
-  dragMode_ = DragMode::None;
   viewport()->update();
 }
 

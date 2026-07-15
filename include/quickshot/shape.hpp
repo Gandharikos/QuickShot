@@ -6,6 +6,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QTransform>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <span>
@@ -15,7 +16,7 @@ class QPainter;
 
 namespace quickshot {
 
-enum class ShapeType { Rectangle, Ellipse, Count };
+enum class ShapeType : std::uint8_t { Rectangle, Ellipse, Count };
 
 class Shape {
 public:

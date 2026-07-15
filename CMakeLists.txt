@@ -25,6 +25,7 @@ endif()
 
 add_library(
   quickshot_ui STATIC
+  src/drag_state.cpp
   src/ellipse.cpp
   src/main_window.cpp
   src/qdrawwidget.cpp
@@ -32,6 +33,7 @@ add_library(
   src/roi_exporter.cpp
   src/shape.cpp
   src/size_handle.cpp
+  include/quickshot/drag_state.hpp
   include/quickshot/ellipse.hpp
   include/quickshot/main_window.hpp
   include/quickshot/qdrawwidget.hpp
@@ -72,14 +74,18 @@ install(TARGETS quickshot RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 if(BUILD_TESTING)
   find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
+  qt_add_executable(drag_state_tests tests/drag_state_test.cpp)
+  target_link_libraries(drag_state_tests PRIVATE quickshot_ui Qt6::Test)
+
   qt_add_executable(quickshot_tests tests/main_window_test.cpp)
   target_link_libraries(quickshot_tests PRIVATE quickshot_ui Qt6::Test)
 
   qt_add_executable(shape_tests tests/shape_test.cpp)
   target_link_libraries(shape_tests PRIVATE quickshot_ui Qt6::Test)
 
+  add_test(NAME drag_state_tests COMMAND drag_state_tests)
   add_test(NAME quickshot_tests COMMAND quickshot_tests)
   add_test(NAME shape_tests COMMAND shape_tests)
-  set_tests_properties(quickshot_tests shape_tests
+  set_tests_properties(drag_state_tests quickshot_tests shape_tests
                        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
