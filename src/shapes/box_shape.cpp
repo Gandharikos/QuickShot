@@ -109,7 +109,10 @@ QRectF resizedBounds(const QRectF& bounds, HandlePosition handle, const QPointF&
 }
 
 qreal boundedLength(qreal requested, qreal maximum) {
-  return std::min(std::max(requested, minimumShapeSize), maximum);
+  if (maximum < minimumShapeSize) {
+    return maximum;
+  }
+  return std::clamp(requested, minimumShapeSize, maximum);
 }
 
 QRectF resizedSquareBounds(const QRectF& bounds, HandlePosition handle, const QPointF& point,

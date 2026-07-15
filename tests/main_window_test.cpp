@@ -1,5 +1,6 @@
 #include "quickshot/main_window.hpp"
 #include "quickshot/qdrawwidget.hpp"
+#include "quickshot/shapes/bezier_curve.hpp"
 #include "quickshot/shapes/circle.hpp"
 #include "quickshot/shapes/polygon.hpp"
 #include "quickshot/shapes/shape.hpp"
@@ -134,6 +135,7 @@ private slots:
   void undoesAndRedoesDragOperations();
   void createsMovesAndResizesShapes();
   void createsCirclesAndPolygons();
+  void createsBezierCurves();
   void hidesInactiveHandlesWhileResizing();
   void contextMenusCloneAndDeleteShapes();
   void resizesAndRotatesFromShapeHandles();
@@ -169,6 +171,7 @@ void MainWindowTest::providesImageControls() {
   const auto* ellipseAction = window.findChild<QAction*>("ellipseAction");
   const auto* circleAction = window.findChild<QAction*>("circleAction");
   const auto* polygonAction = window.findChild<QAction*>("polygonAction");
+  const auto* bezierCurveAction = window.findChild<QAction*>("bezierCurveAction");
   const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
 
   QVERIFY(openButton != nullptr);
@@ -185,6 +188,7 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(ellipseAction != nullptr);
   QVERIFY(circleAction != nullptr);
   QVERIFY(polygonAction != nullptr);
+  QVERIFY(bezierCurveAction != nullptr);
   QVERIFY(zoomFactorSpinBox != nullptr);
   QCOMPARE(rotateLeftAction->text(), QStringLiteral("Rotate Left"));
   QCOMPARE(rotateRightAction->text(), QStringLiteral("Rotate Right"));
@@ -202,21 +206,24 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(ellipseAction->isCheckable());
   QVERIFY(circleAction->isCheckable());
   QVERIFY(polygonAction->isCheckable());
+  QVERIFY(bezierCurveAction->isCheckable());
   QVERIFY(!rectangleAction->icon().isNull());
   QVERIFY(!ellipseAction->icon().isNull());
   QVERIFY(!circleAction->icon().isNull());
   QVERIFY(!polygonAction->icon().isNull());
+  QVERIFY(!bezierCurveAction->icon().isNull());
   QVERIFY(!rectangleAction->isEnabled());
   QVERIFY(!ellipseAction->isEnabled());
   QVERIFY(!circleAction->isEnabled());
   QVERIFY(!polygonAction->isEnabled());
+  QVERIFY(!bezierCurveAction->isEnabled());
   QVERIFY(!zoomFactorSpinBox->isEnabled());
   QCOMPARE(zoomFactorSpinBox->value(), 1.0);
   QCOMPARE(zoomFactorSpinBox->minimum(), 0.1);
   QCOMPARE(zoomFactorSpinBox->maximum(), 8.0);
 
   const QList<QAction*> toolbarActions = toolbar->actions();
-  QCOMPARE(toolbarActions.size(), qsizetype{13});
+  QCOMPARE(toolbarActions.size(), qsizetype{14});
   QVERIFY(toolbarActions.at(1)->isSeparator());
   QCOMPARE(toolbarActions.at(2), undoAction);
   QCOMPARE(toolbarActions.at(3), redoAction);
@@ -229,6 +236,7 @@ void MainWindowTest::providesImageControls() {
   QCOMPARE(toolbarActions.at(10), ellipseAction);
   QCOMPARE(toolbarActions.at(11), circleAction);
   QCOMPARE(toolbarActions.at(12), polygonAction);
+  QCOMPARE(toolbarActions.at(13), bezierCurveAction);
 }
 
 void MainWindowTest::remembersLastOpenDirectory() {
@@ -350,6 +358,7 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   auto* ellipseAction = window.findChild<QAction*>("ellipseAction");
   auto* circleAction = window.findChild<QAction*>("circleAction");
   auto* polygonAction = window.findChild<QAction*>("polygonAction");
+  auto* bezierCurveAction = window.findChild<QAction*>("bezierCurveAction");
   QVERIFY(drawWidget != nullptr);
   QVERIFY(rotateLeftAction != nullptr);
   QVERIFY(rotateRightAction != nullptr);
@@ -357,6 +366,7 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QVERIFY(ellipseAction != nullptr);
   QVERIFY(circleAction != nullptr);
   QVERIFY(polygonAction != nullptr);
+  QVERIFY(bezierCurveAction != nullptr);
 
   window.resize(180, 180);
   window.show();
@@ -369,6 +379,7 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QVERIFY(ellipseAction->isEnabled());
   QVERIFY(circleAction->isEnabled());
   QVERIFY(polygonAction->isEnabled());
+  QVERIFY(bezierCurveAction->isEnabled());
   QVERIFY(drawWidget->horizontalScrollBar()->maximum() > 0);
   QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
 
@@ -545,7 +556,7 @@ void MainWindowTest::createsCirclesAndPolygons() {
   const auto* polygon = dynamic_cast<const quickshot::Polygon*>(drawWidget.shapeAt(1));
   QVERIFY(polygon != nullptr);
   QVERIFY(polygon->isCreationComplete());
-  QCOMPARE(polygon->pointCount(), std::size_t{3});
+  QCOMPARE(polygon->pointCount(), qsizetype{3});
   QCOMPARE(polygon->handles().size(), std::size_t{3});
   QCOMPARE(polygon->handleCenter(polygon->handles().back()), QPointF(130.0, 90.0));
 
@@ -557,6 +568,56 @@ void MainWindowTest::createsCirclesAndPolygons() {
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
   drawWidget.undoStack().redo();
   QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+}
+
+void MainWindowTest::createsBezierCurves() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("bezier-curve.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(220, 180);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+
+  drawWidget.setCreationMode(quickshot::ShapeType::BezierCurve, true);
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {30, 30});
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {160, 30});
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {160, 110});
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {30, 110});
+  QTest::mouseMove(drawWidget.viewport(), {100, 130});
+  QCoreApplication::processEvents();
+
+  const QColor creationHandleColor{0, 200, 83};
+  const QImage draft = renderViewport(drawWidget);
+  QVERIFY(hasColorNear(draft, {30, 30}, creationHandleColor));
+  QVERIFY(hasColorNear(draft, {160, 110}, creationHandleColor));
+
+  // Right-click completes the curve; its position is not appended as an anchor.
+  QTest::mouseClick(drawWidget.viewport(), Qt::RightButton, Qt::NoModifier, {190, 140});
+  QCoreApplication::processEvents();
+
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  const auto* curve = dynamic_cast<const quickshot::BezierCurve*>(drawWidget.shapeAt(0));
+  QVERIFY(curve != nullptr);
+  QVERIFY(curve->isCreationComplete());
+  QCOMPARE(curve->pointCount(), qsizetype{4});
+  QCOMPARE(curve->handles().size(), std::size_t{4});
+  QVERIFY(curve->path().elementAt(1).isCurveTo());
+
+  const QImage completed = renderViewport(drawWidget);
+  QVERIFY(hasColorNear(completed, {30, 30}, Qt::white));
+  QVERIFY(!hasColorNear(completed, {30, 30}, creationHandleColor));
+  QCOMPARE(drawWidget.undoStack().count(), 1);
+  drawWidget.undoStack().undo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
+  drawWidget.undoStack().redo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
 }
 
 void MainWindowTest::hidesInactiveHandlesWhileResizing() {

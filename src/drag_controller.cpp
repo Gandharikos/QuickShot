@@ -1,6 +1,6 @@
 #include "quickshot/drag_controller.hpp"
 
-#include "quickshot/shapes/polygon.hpp"
+#include "quickshot/shapes/multi_point_shape.hpp"
 
 #include <QCoreApplication>
 #include <QtGlobal>
@@ -40,16 +40,16 @@ const ShapeHandle& targetHandle(const DragContext& context) {
   return *context.handle;
 }
 
-Polygon& targetPolygon(DragContext& context) {
-  auto* polygon = dynamic_cast<Polygon*>(context.shape);
-  Q_ASSERT(polygon != nullptr);
-  return *polygon;
+MultiPointShape& targetMultiPointShape(DragContext& context) {
+  auto* multiPointShape = dynamic_cast<MultiPointShape*>(context.shape);
+  Q_ASSERT(multiPointShape != nullptr);
+  return *multiPointShape;
 }
 
-const Polygon& targetPolygon(const DragContext& context) {
-  const auto* polygon = dynamic_cast<const Polygon*>(context.shape);
-  Q_ASSERT(polygon != nullptr);
-  return *polygon;
+const MultiPointShape& targetMultiPointShape(const DragContext& context) {
+  const auto* multiPointShape = dynamic_cast<const MultiPointShape*>(context.shape);
+  Q_ASSERT(multiPointShape != nullptr);
+  return *multiPointShape;
 }
 
 QPointF boundedPoint(const QPointF& point, const QRectF& bounds) {
@@ -103,7 +103,7 @@ const CreateState& CreateState::instance() noexcept {
 }
 
 void CreateState::update(DragContext& context, const QPointF& point) const {
-  targetShape(context).updateCreation(context.origin, point, context.imageBounds);
+  targetShape(context).updateCreation(context.origin, context.imageBounds, point);
 }
 
 DragResult CreateState::finish(const DragContext& context) const noexcept {
@@ -117,41 +117,41 @@ bool CreateState::createsShape() const noexcept { return true; }
 
 Qt::MouseButton CreateState::completionButton() const noexcept { return Qt::LeftButton; }
 
-const PolygonCreateState& PolygonCreateState::instance() noexcept {
-  static const PolygonCreateState state;
+const MultiPointCreateState& MultiPointCreateState::instance() noexcept {
+  static const MultiPointCreateState state;
   return state;
 }
 
-void PolygonCreateState::update(DragContext& context, const QPointF& point) const {
-  targetPolygon(context).setPreviewPoint(boundedPoint(point, context.imageBounds));
+void MultiPointCreateState::update(DragContext& context, const QPointF& point) const {
+  targetMultiPointShape(context).setPreviewPoint(boundedPoint(point, context.imageBounds));
 }
 
-DragProgress PolygonCreateState::press(DragContext& context, Qt::MouseButton button,
-                                       const QPointF& point) const {
+DragProgress MultiPointCreateState::press(DragContext& context, Qt::MouseButton button,
+                                          const QPointF& point) const {
   if (button == Qt::LeftButton) {
     if (!context.imageBounds.contains(point)) {
       return DragProgress::Ignore;
     }
-    targetPolygon(context).appendPoint(point);
+    targetMultiPointShape(context).appendPoint(point);
     return DragProgress::Continue;
   }
   if (button == Qt::RightButton) {
     // The right-click position is deliberately not a vertex; it only commits
     // the points previously added with the left button.
-    targetPolygon(context).finishCreation();
+    targetMultiPointShape(context).finishCreation();
     return DragProgress::Finish;
   }
   return DragProgress::Ignore;
 }
 
-DragResult PolygonCreateState::finish(const DragContext& context) const noexcept {
-  return targetPolygon(context).isCreationComplete() ? DragResult::KeepShape
-                                                     : DragResult::RemoveShape;
+DragResult MultiPointCreateState::finish(const DragContext& context) const noexcept {
+  return targetMultiPointShape(context).isCreationComplete() ? DragResult::KeepShape
+                                                             : DragResult::RemoveShape;
 }
 
-bool PolygonCreateState::createsShape() const noexcept { return true; }
+bool MultiPointCreateState::createsShape() const noexcept { return true; }
 
-Qt::MouseButton PolygonCreateState::completionButton() const noexcept { return Qt::RightButton; }
+Qt::MouseButton MultiPointCreateState::completionButton() const noexcept { return Qt::RightButton; }
 
 const MoveState& MoveState::instance() noexcept {
   static const MoveState state;

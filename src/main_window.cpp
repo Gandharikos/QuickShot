@@ -140,22 +140,30 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
       toolbar->addAction(QIcon::fromTheme(QStringLiteral("draw-polygon"),
                                           svgIcon(QStringLiteral(":/quickshot/icons/polygon.svg"))),
                          tr("Polygon"));
+  auto* bezierCurveAction = toolbar->addAction(
+      QIcon::fromTheme(QStringLiteral("draw-bezier-curves"),
+                       svgIcon(QStringLiteral(":/quickshot/icons/bezier-curve.svg"))),
+      tr("Bezier Curve"));
   rectangleAction->setObjectName("rectangleAction");
   ellipseAction->setObjectName("ellipseAction");
   circleAction->setObjectName("circleAction");
   polygonAction->setObjectName("polygonAction");
+  bezierCurveAction->setObjectName("bezierCurveAction");
   rectangleAction->setCheckable(true);
   ellipseAction->setCheckable(true);
   circleAction->setCheckable(true);
   polygonAction->setCheckable(true);
+  bezierCurveAction->setCheckable(true);
   rectangleAction->setEnabled(false);
   ellipseAction->setEnabled(false);
   circleAction->setEnabled(false);
   polygonAction->setEnabled(false);
+  bezierCurveAction->setEnabled(false);
   shapeActions->addAction(rectangleAction);
   shapeActions->addAction(ellipseAction);
   shapeActions->addAction(circleAction);
   shapeActions->addAction(polygonAction);
+  shapeActions->addAction(bezierCurveAction);
 
   connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
   connect(rotateLeftAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateLeft);
@@ -172,6 +180,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
           [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Circle, enabled); });
   connect(polygonAction, &QAction::triggered, this,
           [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Polygon, enabled); });
+  connect(bezierCurveAction, &QAction::triggered, this,
+          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::BezierCurve, enabled); });
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateLeftAction,
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateRightAction,
@@ -183,6 +193,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, ellipseAction, &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, circleAction, &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, polygonAction, &QAction::setEnabled);
+  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, bezierCurveAction,
+          &QAction::setEnabled);
 
   setCentralWidget(drawWidget_);
 }

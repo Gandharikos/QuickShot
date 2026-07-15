@@ -2,14 +2,12 @@
 
 #include "quickshot/shapes/multi_point_shape.hpp"
 
-#include <QPolygonF>
-
 namespace quickshot {
 
-class Polygon final : public MultiPointShape {
+class BezierCurve final : public MultiPointShape {
 public:
-  explicit Polygon(const QRectF& bounds);
-  explicit Polygon(QPolygonF points);
+  explicit BezierCurve(const QRectF& bounds);
+  explicit BezierCurve(QPolygonF points);
 
   [[nodiscard]] std::unique_ptr<Shape> clone() const override;
 

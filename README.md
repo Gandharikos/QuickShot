@@ -32,7 +32,9 @@ corner, or edit the toolbar factor with its arrows or mouse wheel. The zoom rang
 A normal mouse wheel over the image continues to scroll it. Open and ROI save dialogs remember
 their most recently used directories independently.
 
-Use **Rectangle**, **Ellipse**, **Circle**, or **Polygon** to draw image-coordinate ROIs. Finish a
+Use **Rectangle**, **Ellipse**, **Circle**, **Polygon**, or **Bezier Curve** to draw image-coordinate
+ROIs. Polygon and Bezier Curve connect left-clicked anchors automatically; right-click finishes and
+closes the shape without adding another anchor. Finish a
 polygon by right-clicking after adding at least three vertices with the left button. Drag a shape to
 move it or use one of its handles to resize it. The selected shape is red and unselected shapes are
 white.

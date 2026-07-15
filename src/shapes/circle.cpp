@@ -21,8 +21,8 @@ std::unique_ptr<Shape> Circle::clone() const {
   return circle;
 }
 
-void Circle::updateCreation(const QPointF& origin, const QPointF& imagePoint,
-                            const QRectF& imageBounds) {
+void Circle::updateCreation(const QPointF& origin, const QRectF& imageBounds,
+                            const QPointF& imagePoint) {
   const QPointF boundedPoint{std::clamp(imagePoint.x(), imageBounds.left(), imageBounds.right()),
                              std::clamp(imagePoint.y(), imageBounds.top(), imageBounds.bottom())};
   const qreal horizontalDirection = boundedPoint.x() < origin.x() ? -1.0 : 1.0;
@@ -33,7 +33,7 @@ void Circle::updateCreation(const QPointF& origin, const QPointF& imagePoint,
                                                             : imageBounds.right() - origin.x();
   const qreal verticalMaximum =
       verticalDirection < 0.0 ? origin.y() - imageBounds.top() : imageBounds.bottom() - origin.y();
-  const qreal side = std::min(requestedSide, std::min(horizontalMaximum, verticalMaximum));
+  const qreal side = std::min({requestedSide, horizontalMaximum, verticalMaximum});
   BoxShape::setBoundingRect(
       QRectF{origin, origin + QPointF{horizontalDirection * side, verticalDirection * side}}
           .normalized());

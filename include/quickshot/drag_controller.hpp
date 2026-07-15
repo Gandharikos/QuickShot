@@ -102,9 +102,9 @@ private:
   MoveState() = default;
 };
 
-class PolygonCreateState final : public DragState {
+class MultiPointCreateState final : public DragState {
 public:
-  [[nodiscard]] static const PolygonCreateState& instance() noexcept;
+  [[nodiscard]] static const MultiPointCreateState& instance() noexcept;
 
   void update(DragContext& context, const QPointF& point) const override;
   [[nodiscard]] DragProgress press(DragContext& context, Qt::MouseButton button,
@@ -114,7 +114,7 @@ public:
   [[nodiscard]] Qt::MouseButton completionButton() const noexcept override;
 
 private:
-  PolygonCreateState() = default;
+  MultiPointCreateState() = default;
 };
 
 class ResizeState final : public DragState {

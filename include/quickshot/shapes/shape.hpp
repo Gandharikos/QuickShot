@@ -16,7 +16,7 @@ class QPainter;
 
 namespace quickshot {
 
-enum class ShapeType : std::uint8_t { Rectangle, Ellipse, Circle, Polygon, Count };
+enum class ShapeType : std::uint8_t { Rectangle, Ellipse, Circle, Polygon, BezierCurve, Count };
 
 enum class CreationKind : std::uint8_t { Drag, MultiPoint };
 
@@ -59,8 +59,8 @@ public:
   virtual void restoreGeometry(const ShapeGeometry& geometry) = 0;
   virtual void resize(const ShapeGeometry& initialGeometry, const ShapeHandle& handle,
                       const QPointF& imagePoint, const QRectF& imageBounds) = 0;
-  virtual void updateCreation(const QPointF& origin, const QPointF& imagePoint,
-                              const QRectF& imageBounds);
+  virtual void updateCreation(const QPointF& origin, const QRectF& imageBounds,
+                              const QPointF& imagePoint);
   [[nodiscard]] virtual CreationKind creationKind() const noexcept;
   [[nodiscard]] virtual bool isCreationComplete() const noexcept;
 

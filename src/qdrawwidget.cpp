@@ -83,7 +83,7 @@ const DragState& creationState(const Shape& shape) {
   case CreationKind::Drag:
     return CreateState::instance();
   case CreationKind::MultiPoint:
-    return PolygonCreateState::instance();
+    return MultiPointCreateState::instance();
   }
   return CreateState::instance();
 }

@@ -1,4 +1,5 @@
 #include "quickshot/roi_exporter.hpp"
+#include "quickshot/shapes/bezier_curve.hpp"
 #include "quickshot/shapes/circle.hpp"
 #include "quickshot/shapes/ellipse.hpp"
 #include "quickshot/shapes/polygon.hpp"
@@ -25,6 +26,7 @@ private slots:
   void ellipseProvidesEightHandles();
   void circlePreservesItsAspectRatio();
   void polygonProvidesVertexHandlesAndAClosedPath();
+  void bezierCurveProvidesAutomaticClosedCurve();
   void polygonGeometryMementoRestoresVertices();
   void clonePreservesConcreteShape();
   void rotationTransformsPathAndHandles();
@@ -34,6 +36,7 @@ private slots:
   void extractsRectangleRoi();
   void extractsTransparentEllipseRoi();
   void extractsTransparentPolygonRoi();
+  void extractsTransparentBezierRoi();
   void extractsRotatedRoi();
   void savesRoiAsPng();
 };
@@ -49,15 +52,19 @@ void ShapeTest::factoryCreatesConcreteShapes() {
       quickshot::Shape::make(quickshot::ShapeType::Circle, bounds);
   const std::unique_ptr<quickshot::Shape> polygon =
       quickshot::Shape::make(quickshot::ShapeType::Polygon, bounds);
+  const std::unique_ptr<quickshot::Shape> bezierCurve =
+      quickshot::Shape::make(quickshot::ShapeType::BezierCurve, bounds);
 
   QVERIFY(dynamic_cast<const quickshot::Rectangle*>(rectangle.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipse.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Circle*>(circle.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(circle.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Polygon*>(polygon.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::BezierCurve*>(bezierCurve.get()) != nullptr);
   QCOMPARE(rectangle->boundingRect(), bounds);
   QCOMPARE(ellipse->boundingRect(), bounds);
   QCOMPARE(polygon->boundingRect(), bounds);
+  QCOMPARE(bezierCurve->boundingRect(), bounds);
   QVERIFY_EXCEPTION_THROWN(
       static_cast<void>(quickshot::Shape::make(quickshot::ShapeType::Count, bounds)),
       std::invalid_argument);
@@ -68,7 +75,7 @@ void ShapeTest::circlePreservesItsAspectRatio() {
   QCOMPARE(circle.boundingRect(), QRectF(10.0, 25.0, 30.0, 30.0));
   QCOMPARE(circle.handles().size(), std::size_t{8});
 
-  circle.updateCreation({20.0, 20.0}, {70.0, 50.0}, {0.0, 0.0, 100.0, 100.0});
+  circle.updateCreation({20.0, 20.0}, {0.0, 0.0, 100.0, 100.0}, {70.0, 50.0});
   QCOMPARE(circle.boundingRect(), QRectF(20.0, 20.0, 50.0, 50.0));
 
   const std::unique_ptr<quickshot::ShapeGeometry> geometry = circle.captureGeometry();
@@ -85,7 +92,7 @@ void ShapeTest::polygonProvidesVertexHandlesAndAClosedPath() {
   polygon.appendPoint({40.0, 70.0});
   polygon.setPreviewPoint({90.0, 90.0});
 
-  QCOMPARE(polygon.pointCount(), std::size_t{3});
+  QCOMPARE(polygon.pointCount(), qsizetype{3});
   QVERIFY(!polygon.isCreationComplete());
   polygon.finishCreation();
 
@@ -94,6 +101,27 @@ void ShapeTest::polygonProvidesVertexHandlesAndAClosedPath() {
   QCOMPARE(polygon.handleCenter(polygon.handles().back()), QPointF(40.0, 70.0));
   QVERIFY(polygon.contains({40.0, 30.0}));
   QVERIFY(!polygon.contains({90.0, 90.0}));
+}
+
+void ShapeTest::bezierCurveProvidesAutomaticClosedCurve() {
+  quickshot::BezierCurve curve{QRectF{10.0, 10.0, 0.0, 0.0}};
+  curve.appendPoint({70.0, 10.0});
+  curve.appendPoint({70.0, 70.0});
+  curve.appendPoint({10.0, 70.0});
+  curve.setPreviewPoint({40.0, 90.0});
+
+  QVERIFY(!curve.isCreationComplete());
+  QVERIFY(curve.path().elementCount() > curve.pointCount());
+  QVERIFY(curve.path().elementAt(1).isCurveTo());
+
+  curve.finishCreation();
+
+  QVERIFY(curve.isCreationComplete());
+  QCOMPARE(curve.pointCount(), qsizetype{4});
+  QCOMPARE(curve.handles().size(), std::size_t{4});
+  QVERIFY(curve.path().elementAt(1).isCurveTo());
+  QVERIFY(curve.contains({40.0, 40.0}));
+  QVERIFY(!curve.contains({90.0, 90.0}));
 }
 
 void ShapeTest::polygonGeometryMementoRestoresVertices() {
@@ -141,17 +169,21 @@ void ShapeTest::clonePreservesConcreteShape() {
   const quickshot::Ellipse ellipse{QRectF{5.0, 6.0, 30.0, 20.0}};
   const quickshot::Circle circle{QRectF{4.0, 8.0, 20.0, 20.0}};
   const quickshot::Polygon polygon{{{10.0, 10.0}, {70.0, 10.0}, {40.0, 70.0}}};
+  const quickshot::BezierCurve bezierCurve{
+      {{10.0, 10.0}, {70.0, 10.0}, {70.0, 70.0}, {10.0, 70.0}}};
   rectangle.setRotationDegrees(42.0);
 
   const std::unique_ptr<quickshot::Shape> rectangleClone = rectangle.clone();
   const std::unique_ptr<quickshot::Shape> ellipseClone = ellipse.clone();
   const std::unique_ptr<quickshot::Shape> circleClone = circle.clone();
   const std::unique_ptr<quickshot::Shape> polygonClone = polygon.clone();
+  const std::unique_ptr<quickshot::Shape> bezierCurveClone = bezierCurve.clone();
 
   QVERIFY(dynamic_cast<const quickshot::Rectangle*>(rectangleClone.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipseClone.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Circle*>(circleClone.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Polygon*>(polygonClone.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::BezierCurve*>(bezierCurveClone.get()) != nullptr);
   QCOMPARE(rectangleClone->boundingRect(), rectangle.boundingRect());
   QCOMPARE(ellipseClone->boundingRect(), ellipse.boundingRect());
   QCOMPARE(rectangleClone->rotationDegrees(), 42.0);
@@ -177,6 +209,11 @@ void ShapeTest::movesAndTransformsGeometry() {
   transformation.scale(2.0, 3.0);
   rectangle.transform(transformation);
   QCOMPARE(rectangle.boundingRect(), QRectF(30.0, 30.0, 60.0, 120.0));
+
+  quickshot::Polygon polygon{{{10.0, 10.0}, {70.0, 10.0}, {40.0, 70.0}}};
+  polygon.setBoundingRect({20.0, 30.0, 120.0, 120.0});
+  QCOMPARE(polygon.boundingRect(), QRectF(20.0, 30.0, 120.0, 120.0));
+  QCOMPARE(polygon.handleCenter(polygon.handles().back()), QPointF(80.0, 150.0));
 }
 
 void ShapeTest::shapeHandlesExposeIdsCentersAndCursors() {
@@ -241,6 +278,18 @@ void ShapeTest::extractsTransparentPolygonRoi() {
   QCOMPARE(roi.size(), QSize(10, 10));
   QCOMPARE(roi.pixelColor(1, 1), QColor(Qt::red));
   QCOMPARE(roi.pixelColor(9, 9).alpha(), 0);
+}
+
+void ShapeTest::extractsTransparentBezierRoi() {
+  QImage image{{20, 20}, QImage::Format_RGB32};
+  image.fill(Qt::red);
+  const quickshot::BezierCurve curve{{{3.0, 3.0}, {13.0, 3.0}, {13.0, 13.0}, {3.0, 13.0}}};
+
+  const QImage roi = quickshot::extractRoi(image, curve);
+
+  QVERIFY(!roi.isNull());
+  QCOMPARE(roi.pixelColor(roi.width() / 2, roi.height() / 2), QColor(Qt::red));
+  QCOMPARE(roi.pixelColor(0, 0).alpha(), 0);
 }
 
 void ShapeTest::extractsRotatedRoi() {
