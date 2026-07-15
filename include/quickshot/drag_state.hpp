@@ -13,7 +13,12 @@ namespace quickshot {
 
 class Shape;
 
-enum class DragResult : std::uint8_t { KeepShape, RemoveShape };
+enum class DragResult : std::uint8_t {
+  KeepShape,
+  // CreateState updates a provisional shape already inserted for live preview;
+  // remove it when the completed gesture is too small to produce a valid shape.
+  RemoveShape,
+};
 
 class DragState {
 public:

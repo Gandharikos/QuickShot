@@ -454,7 +454,11 @@ std::optional<HandlePosition> QDrawWidget::handleAt(const QPointF& point) const 
 }
 
 QRectF QDrawWidget::handleRect(const ::quickshot::Shape& shape, HandlePosition position) const {
+  // Convert the fixed viewport handle size to image coordinates so zooming does
+  // not change its on-screen size.
   const qreal imageHandleSize = handleSize / zoomFactor_;
+  // Use the transformed center because rotated shape handles no longer lie on
+  // the axis-aligned bounding rectangle.
   const QPointF center = shape.handleCenter(ShapeHandle{position});
   const qreal halfSize = imageHandleSize / 2.0;
   return {center.x() - halfSize, center.y() - halfSize, imageHandleSize, imageHandleSize};
