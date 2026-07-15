@@ -5,6 +5,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QString>
+#include <QUndoStack>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -24,6 +25,7 @@ enum class HandlePosition : std::uint8_t;
 enum class ShapeType : std::uint8_t;
 class DragState;
 class Shape;
+class ShapeCommand;
 
 class QDrawWidget final : public QAbstractScrollArea {
   Q_OBJECT
@@ -38,6 +40,8 @@ public:
   [[nodiscard]] QSize sizeHint() const override;
   [[nodiscard]] qsizetype shapeCount() const noexcept;
   [[nodiscard]] const ::quickshot::Shape* shapeAt(qsizetype index) const;
+  [[nodiscard]] QUndoStack& undoStack() noexcept;
+  [[nodiscard]] const QUndoStack& undoStack() const noexcept;
   void setZoomFactor(qreal factor);
   void setCreationMode(ShapeType type, bool enabled);
   void rotateLeft();
@@ -57,6 +61,8 @@ protected:
   void wheelEvent(QWheelEvent* event) override;
 
 private:
+  friend class ShapeCommand;
+
   [[nodiscard]] QPointF imagePosition(const QPointF& viewportPosition) const;
   [[nodiscard]] QRectF imageBounds() const;
   [[nodiscard]] ::quickshot::Shape* shapeAt(const QPointF& point) const;
@@ -65,9 +71,10 @@ private:
   [[nodiscard]] QRectF constrainedMove(const QRectF& bounds, const QPointF& offset) const;
   void updateHoverCursor(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
-  void cloneShape(const ::quickshot::Shape& shape);
-  void deleteShape(const ::quickshot::Shape& shape);
-  void deleteAllShapes();
+  [[nodiscard]] std::unique_ptr<::quickshot::Shape>
+  makeOffsetClone(const ::quickshot::Shape& shape) const;
+  void pushCommand(std::unique_ptr<QUndoCommand> command);
+  void clearUndoHistoryForUntrackedEdit();
   void saveRois(const std::vector<const ::quickshot::Shape*>& targets);
   void rotateImage(qreal degrees);
   [[nodiscard]] QSize scaledImageSize() const;
@@ -78,6 +85,7 @@ private:
   ::quickshot::Shape* selectedShape_ = nullptr;
   std::optional<ShapeType> creationType_;
   std::unique_ptr<DragState> dragState_;
+  QUndoStack undoStack_;
   QString lastSaveDirectory_;
   qreal zoomFactor_ = 1.0;
   bool suppressContextMenu_ = false;

@@ -439,16 +439,39 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
 
   QVERIFY(triggerContextMenuAction(drawWidget, {60, 50}, "cloneShapeAction"));
   QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+  QCOMPARE(drawWidget.undoStack().count(), 1);
   QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(30.0, 30.0, 60.0, 60.0));
   const QImage clonedShapes = renderViewport(drawWidget);
   QVERIFY(hasColorNear(clonedShapes, {30, 45}, Qt::red));
   QVERIFY(hasColorNear(clonedShapes, {100, 45}, Qt::white));
 
+  drawWidget.undoStack().undo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  drawWidget.undoStack().redo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+  QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(30.0, 30.0, 60.0, 60.0));
+
   QVERIFY(triggerContextMenuAction(drawWidget, {35, 50}, "deleteShapeAction"));
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget.undoStack().count(), 2);
+
+  drawWidget.undoStack().undo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+  QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(30.0, 30.0, 60.0, 60.0));
+  drawWidget.undoStack().redo();
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
 
   QVERIFY(triggerContextMenuAction(drawWidget, {180, 130}, "deleteAllShapesAction"));
   QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
+  QCOMPARE(drawWidget.undoStack().count(), 3);
+
+  drawWidget.undoStack().undo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  drawWidget.undoStack().redo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
+
+  QVERIFY(drawWidget.loadImage(imagePath));
+  QCOMPARE(drawWidget.undoStack().count(), 0);
 }
 
 void MainWindowTest::resizesAndRotatesFromShapeHandles() {

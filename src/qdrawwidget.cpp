@@ -1,5 +1,6 @@
 #include "quickshot/qdrawwidget.hpp"
 
+#include "quickshot/commands/shape_commands.hpp"
 #include "quickshot/drag_state.hpp"
 #include "quickshot/roi_exporter.hpp"
 #include "quickshot/shapes/shape.hpp"
@@ -79,7 +80,7 @@ QString numberedPngFileName(const QString& baseFileName, std::size_t index) {
 
 } // namespace
 
-QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent) {
+QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent), undoStack_(this) {
   setFrameShape(QFrame::NoFrame);
   viewport()->setAutoFillBackground(false);
   viewport()->setMouseTracking(true);
@@ -107,6 +108,7 @@ bool QDrawWidget::loadImage(const QString& fileName) {
 
   image_ = std::move(image);
   dragState_.reset();
+  undoStack_.clear();
   shapes_.clear();
   selectedShape_ = nullptr;
   const qreal previousZoom = zoomFactor_;
@@ -140,6 +142,10 @@ const ::quickshot::Shape* QDrawWidget::shapeAt(qsizetype index) const {
   const auto position = static_cast<std::size_t>(index);
   return position < shapes_.size() ? shapes_[position].get() : nullptr;
 }
+
+QUndoStack& QDrawWidget::undoStack() noexcept { return undoStack_; }
+
+const QUndoStack& QDrawWidget::undoStack() const noexcept { return undoStack_; }
 
 void QDrawWidget::setZoomFactor(qreal factor) {
   const qreal boundedFactor = std::clamp(factor, minimumZoom, maximumZoom);
@@ -188,14 +194,15 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
     QAction* deleteAction = menu.addAction(tr("Delete"));
     deleteAction->setObjectName("deleteShapeAction");
 
-    const QAction* selectedAction = menu.exec(event->globalPos());
-    if (selectedAction == saveAction) {
-      saveRois({targetShape});
-    } else if (selectedAction == cloneAction) {
-      cloneShape(*targetShape);
-    } else if (selectedAction == deleteAction) {
-      deleteShape(*targetShape);
-    }
+    connect(saveAction, &QAction::triggered, this,
+            [this, targetShape]() { saveRois({targetShape}); });
+    connect(cloneAction, &QAction::triggered, this, [this, targetShape]() {
+      pushCommand(std::make_unique<CloneShapeCommand>(*this, *targetShape));
+    });
+    connect(deleteAction, &QAction::triggered, this, [this, targetShape]() {
+      pushCommand(std::make_unique<DeleteShapeCommand>(*this, *targetShape));
+    });
+    menu.exec(event->globalPos());
   } else {
     QAction* saveAllAction = menu.addAction(tr("Save All"));
     saveAllAction->setObjectName("saveAllRoisAction");
@@ -204,17 +211,17 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
     deleteAllAction->setObjectName("deleteAllShapesAction");
     deleteAllAction->setEnabled(!shapes_.empty());
 
-    const QAction* selectedAction = menu.exec(event->globalPos());
-    if (selectedAction == saveAllAction) {
+    connect(saveAllAction, &QAction::triggered, this, [this]() {
       std::vector<const ::quickshot::Shape*> targets;
       targets.reserve(shapes_.size());
       for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
         targets.push_back(shape.get());
       }
       saveRois(targets);
-    } else if (selectedAction == deleteAllAction) {
-      deleteAllShapes();
-    }
+    });
+    connect(deleteAllAction, &QAction::triggered, this,
+            [this]() { pushCommand(std::make_unique<DeleteAllShapesCommand>(*this)); });
+    menu.exec(event->globalPos());
   }
 
   event->accept();
@@ -242,6 +249,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
   if (event->button() == Qt::RightButton) {
     if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
+      clearUndoHistoryForUntrackedEdit();
       dragState_ = std::make_unique<RotateState>(*selectedShape_, *handle, point);
       suppressContextMenu_ = true;
       viewport()->setCursor(rotationCursor());
@@ -265,6 +273,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   }
 
   if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
+    clearUndoHistoryForUntrackedEdit();
     dragState_ = std::make_unique<ResizeState>(*selectedShape_, *handle, imageBounds());
     viewport()->update();
     event->accept();
@@ -272,6 +281,7 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   }
 
   if (::quickshot::Shape* hitShape = shapeAt(point); hitShape != nullptr) {
+    clearUndoHistoryForUntrackedEdit();
     selectedShape_ = hitShape;
     dragState_ = std::make_unique<MoveState>(*selectedShape_, point, imageBounds());
     viewport()->update();
@@ -280,9 +290,11 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   }
 
   if (creationType_.has_value()) {
+    const ShapeType creationType = *creationType_;
+    clearUndoHistoryForUntrackedEdit();
     const QRectF initialBounds{point, point};
     std::unique_ptr<::quickshot::Shape> shape =
-        ::quickshot::Shape::make(*creationType_, initialBounds);
+        ::quickshot::Shape::make(creationType, initialBounds);
 
     selectedShape_ = shape.get();
     shapes_.push_back(std::move(shape));
@@ -467,7 +479,8 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
   painter.restore();
 }
 
-void QDrawWidget::cloneShape(const ::quickshot::Shape& shape) {
+std::unique_ptr<::quickshot::Shape>
+QDrawWidget::makeOffsetClone(const ::quickshot::Shape& shape) const {
   const QRectF sourceBounds = shape.boundingRect();
   constexpr std::array offsets = {QPointF{-cloneOffset, 0.0}, QPointF{cloneOffset, 0.0},
                                   QPointF{0.0, -cloneOffset}, QPointF{0.0, cloneOffset}};
@@ -480,35 +493,20 @@ void QDrawWidget::cloneShape(const ::quickshot::Shape& shape) {
 
     std::unique_ptr<::quickshot::Shape> clonedShape = shape.clone();
     clonedShape->setBoundingRect(cloneBounds);
-    selectedShape_ = clonedShape.get();
-    shapes_.push_back(std::move(clonedShape));
-    viewport()->update();
-    return;
+    return clonedShape;
   }
+
+  return nullptr;
 }
 
-void QDrawWidget::deleteShape(const ::quickshot::Shape& shape) {
-  const auto shapeToDelete =
-      std::ranges::find_if(shapes_, [&shape](const std::unique_ptr<::quickshot::Shape>& candidate) {
-        return candidate.get() == &shape;
-      });
-  if (shapeToDelete == shapes_.end()) {
-    return;
-  }
-
-  if (selectedShape_ == shapeToDelete->get()) {
-    selectedShape_ = nullptr;
-  }
-  dragState_.reset();
-  shapes_.erase(shapeToDelete);
-  viewport()->update();
+void QDrawWidget::pushCommand(std::unique_ptr<QUndoCommand> command) {
+  undoStack_.push(command.release());
 }
 
-void QDrawWidget::deleteAllShapes() {
-  dragState_.reset();
-  shapes_.clear();
-  selectedShape_ = nullptr;
-  viewport()->update();
+void QDrawWidget::clearUndoHistoryForUntrackedEdit() {
+  // A stack can only replay a consistent timeline. Drag edits will stop clearing
+  // history once they also produce commands with before/after state.
+  undoStack_.clear();
 }
 
 void QDrawWidget::saveRois(const std::vector<const ::quickshot::Shape*>& targets) {
@@ -560,6 +558,8 @@ void QDrawWidget::rotateImage(qreal degrees) {
   if (image_.isNull()) {
     return;
   }
+
+  clearUndoHistoryForUntrackedEdit();
 
   QTransform rotation;
   rotation.rotate(degrees);
