@@ -1,7 +1,5 @@
 #pragma once
 
-#include <QPointF>
-#include <QRectF>
 #include <Qt>
 #include <cstdint>
 
@@ -20,16 +18,39 @@ enum class HandlePosition : std::uint8_t {
 
 class ShapeHandle final {
 public:
-  explicit constexpr ShapeHandle(HandlePosition position) noexcept : position_(position) {}
+  using Id = std::uint32_t;
 
-  [[nodiscard]] static HandlePosition oppositePosition(HandlePosition position) noexcept;
-  [[nodiscard]] constexpr HandlePosition position() const noexcept { return position_; }
-  [[nodiscard]] QPointF center(const QRectF& bounds) const;
-  [[nodiscard]] QRectF hitRect(const QRectF& bounds, qreal size) const;
-  [[nodiscard]] Qt::CursorShape cursorShape() const noexcept;
+  explicit constexpr ShapeHandle(Id id, Qt::CursorShape cursorShape = Qt::ArrowCursor) noexcept
+      : id_(id), cursorShape_(cursorShape) {}
+  explicit constexpr ShapeHandle(HandlePosition position) noexcept
+      : id_(static_cast<Id>(position)), cursorShape_(rectangularCursor(position)) {}
+
+  [[nodiscard]] constexpr Id id() const noexcept { return id_; }
+  [[nodiscard]] constexpr Qt::CursorShape cursorShape() const noexcept { return cursorShape_; }
+  [[nodiscard]] constexpr bool operator==(const ShapeHandle&) const noexcept = default;
 
 private:
-  HandlePosition position_;
+  [[nodiscard]] static constexpr Qt::CursorShape
+  rectangularCursor(HandlePosition position) noexcept {
+    switch (position) {
+    case HandlePosition::TopLeft:
+    case HandlePosition::BottomRight:
+      return Qt::SizeFDiagCursor;
+    case HandlePosition::Top:
+    case HandlePosition::Bottom:
+      return Qt::SizeVerCursor;
+    case HandlePosition::TopRight:
+    case HandlePosition::BottomLeft:
+      return Qt::SizeBDiagCursor;
+    case HandlePosition::Right:
+    case HandlePosition::Left:
+      return Qt::SizeHorCursor;
+    }
+    return Qt::ArrowCursor;
+  }
+
+  Id id_;
+  Qt::CursorShape cursorShape_;
 };
 
 } // namespace quickshot

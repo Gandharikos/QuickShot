@@ -5,26 +5,20 @@
 
 namespace quickshot {
 
-Ellipse::Ellipse(const QRectF& bounds) : bounds_(bounds.normalized()) {}
+Ellipse::Ellipse(const QRectF& bounds) : RectangularShape(bounds) {}
 
 std::unique_ptr<Shape> Ellipse::clone() const {
-  auto ellipse = std::make_unique<Ellipse>(bounds_);
+  auto ellipse = std::make_unique<Ellipse>(boundingRect());
   ellipse->setRotationDegrees(rotationDegrees());
   return ellipse;
 }
 
 void Ellipse::draw(QPainter& painter) const { painter.drawPath(path()); }
 
-QRectF Ellipse::boundingRect() const { return bounds_; }
-
-void Ellipse::setBoundingRect(const QRectF& bounds) { bounds_ = bounds.normalized(); }
-
 QPainterPath Ellipse::path() const {
   QPainterPath shapePath;
-  shapePath.addEllipse(bounds_);
+  shapePath.addEllipse(boundingRect());
   return mapPathToImage(shapePath);
 }
-
-std::span<const ShapeHandle> Ellipse::handles() const noexcept { return handles_; }
 
 } // namespace quickshot

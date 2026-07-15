@@ -1,5 +1,7 @@
 #pragma once
 
+#include "quickshot/drag_controller.hpp"
+
 #include <QAbstractScrollArea>
 #include <QImage>
 #include <QPointF>
@@ -22,9 +24,7 @@ class QWheelEvent;
 
 namespace quickshot {
 
-enum class HandlePosition : std::uint8_t;
 enum class ShapeType : std::uint8_t;
-class DragState;
 class Shape;
 class ShapeCommand;
 
@@ -67,8 +67,8 @@ private:
   [[nodiscard]] QPointF imagePosition(const QPointF& viewportPosition) const;
   [[nodiscard]] QRectF imageBounds() const;
   [[nodiscard]] ::quickshot::Shape* shapeAt(const QPointF& point) const;
-  [[nodiscard]] std::optional<HandlePosition> handleAt(const QPointF& point) const;
-  [[nodiscard]] QRectF handleRect(const ::quickshot::Shape& shape, HandlePosition position) const;
+  [[nodiscard]] std::optional<ShapeHandle> handleAt(const QPointF& point) const;
+  [[nodiscard]] QRectF handleRect(const ::quickshot::Shape& shape, const ShapeHandle& handle) const;
   [[nodiscard]] QRectF constrainedMove(const QRectF& bounds, const QPointF& offset) const;
   void initializeContextActions();
   void saveSelectedRoi();
@@ -81,6 +81,8 @@ private:
   [[nodiscard]] std::unique_ptr<::quickshot::Shape>
   makeOffsetClone(const ::quickshot::Shape& shape) const;
   void pushCommand(std::unique_ptr<QUndoCommand> command);
+  void completeDrag(DragCompletion completion);
+  void cancelDrag();
   void clearUndoHistoryForUntrackedEdit();
   void saveRois(const std::vector<const ::quickshot::Shape*>& targets);
   void rotateImage(qreal degrees);
@@ -91,7 +93,7 @@ private:
   std::vector<std::unique_ptr<::quickshot::Shape>> shapes_;
   ::quickshot::Shape* selectedShape_ = nullptr;
   std::optional<ShapeType> creationType_;
-  std::unique_ptr<DragState> dragState_;
+  DragController dragController_;
   QUndoStack undoStack_;
   QAction* saveRoiAction_ = nullptr;
   QAction* cloneShapeAction_ = nullptr;

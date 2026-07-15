@@ -36,7 +36,9 @@ Use **Rectangle** or **Ellipse** to draw image-coordinate ROIs. Drag a shape to 
 its eight handles to resize it. The selected shape is red and unselected shapes are white.
 Left-drag any handle to resize, or right-drag any handle to rotate around the shape's center.
 Right-click a shape to save, clone, or delete it. Right-click outside all shapes to save or delete
-all ROIs. Saved files use PNG; ellipse pixels outside the shape are transparent.
+all ROIs. Use the toolbar actions or **Ctrl+Z** and **Ctrl+Shift+Z** to undo and redo shape creation,
+movement, resizing, rotation, cloning, and deletion. Rotating the source image starts a new shape
+history. Saved files use PNG; ellipse pixels outside the shape are transparent.
 
 ## Nix outputs
 

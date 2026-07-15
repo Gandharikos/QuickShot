@@ -33,6 +33,7 @@ protected:
   void restoreShapes(std::vector<std::unique_ptr<Shape>> shapes);
   [[nodiscard]] Shape* selectedShape() const noexcept;
   void setSelectedShape(Shape* shape) noexcept;
+  void applyGeometry(Shape& shape, const ShapeGeometry& geometry);
   void updateViewport();
 
 private:
@@ -50,6 +51,35 @@ private:
   std::unique_ptr<Shape> clone_;
   Shape* previousSelection_ = nullptr;
   std::size_t insertionIndex_ = 0;
+};
+
+class CreateShapeCommand final : public ShapeCommand {
+public:
+  CreateShapeCommand(QDrawWidget& drawWidget, std::unique_ptr<Shape> shape,
+                     std::size_t insertionIndex, Shape* previousSelection);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  std::unique_ptr<Shape> shape_;
+  Shape* previousSelection_ = nullptr;
+  std::size_t insertionIndex_ = 0;
+};
+
+class TransformShapeCommand final : public ShapeCommand {
+public:
+  TransformShapeCommand(QDrawWidget& drawWidget, Shape& shape,
+                        std::unique_ptr<ShapeGeometry> before, std::unique_ptr<ShapeGeometry> after,
+                        const QString& text);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  Shape& shape_;
+  std::unique_ptr<ShapeGeometry> before_;
+  std::unique_ptr<ShapeGeometry> after_;
 };
 
 class DeleteShapeCommand final : public ShapeCommand {

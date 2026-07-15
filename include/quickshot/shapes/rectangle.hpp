@@ -1,31 +1,16 @@
 #pragma once
 
-#include "quickshot/shapes/shape.hpp"
-
-#include <array>
+#include "quickshot/shapes/rectangular_shape.hpp"
 
 namespace quickshot {
 
-class Rectangle final : public Shape {
+class Rectangle final : public RectangularShape {
 public:
   explicit Rectangle(const QRectF& bounds);
 
   [[nodiscard]] std::unique_ptr<Shape> clone() const override;
   void draw(QPainter& painter) const override;
-  [[nodiscard]] QRectF boundingRect() const override;
-  void setBoundingRect(const QRectF& bounds) override;
   [[nodiscard]] QPainterPath path() const override;
-  [[nodiscard]] std::span<const ShapeHandle> handles() const noexcept override;
-
-private:
-  static constexpr std::array handles_ = {
-      ShapeHandle{HandlePosition::TopLeft},     ShapeHandle{HandlePosition::Top},
-      ShapeHandle{HandlePosition::TopRight},    ShapeHandle{HandlePosition::Right},
-      ShapeHandle{HandlePosition::BottomRight}, ShapeHandle{HandlePosition::Bottom},
-      ShapeHandle{HandlePosition::BottomLeft},  ShapeHandle{HandlePosition::Left},
-  };
-
-  QRectF bounds_;
 };
 
 } // namespace quickshot

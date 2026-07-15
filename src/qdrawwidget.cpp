@@ -1,7 +1,6 @@
 #include "quickshot/qdrawwidget.hpp"
 
 #include "quickshot/commands/shape_commands.hpp"
-#include "quickshot/drag_state.hpp"
 #include "quickshot/roi_exporter.hpp"
 #include "quickshot/shapes/shape.hpp"
 
@@ -34,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <ranges>
 #include <utility>
 
@@ -107,8 +107,8 @@ bool QDrawWidget::loadImage(const QString& fileName) {
     return false;
   }
 
+  cancelDrag();
   image_ = std::move(image);
-  dragState_.reset();
   undoStack_.clear();
   shapes_.clear();
   selectedShape_ = nullptr;
@@ -254,8 +254,8 @@ void QDrawWidget::deleteAllShapes() {
 
 void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
-  if (dragState_ != nullptr) {
-    dragState_->update(point);
+  if (dragController_.isActive()) {
+    dragController_.update(point);
     viewport()->update();
     event->accept();
     return;
@@ -273,9 +273,12 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 
   const QPointF point = imagePosition(event->position());
   if (event->button() == Qt::RightButton) {
-    if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
-      clearUndoHistoryForUntrackedEdit();
-      dragState_ = std::make_unique<RotateState>(*selectedShape_, *handle, point);
+    if (const std::optional<ShapeHandle> handle = handleAt(point); handle.has_value()) {
+      dragController_.begin(RotateState::instance(), {.shape = *selectedShape_,
+                                                      .origin = point,
+                                                      .imageBounds = imageBounds(),
+                                                      .handle = handle,
+                                                      .previousSelection = selectedShape_});
       suppressContextMenu_ = true;
       viewport()->setCursor(rotationCursor());
       viewport()->update();
@@ -297,18 +300,25 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
     return;
   }
 
-  if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
-    clearUndoHistoryForUntrackedEdit();
-    dragState_ = std::make_unique<ResizeState>(*selectedShape_, *handle, imageBounds());
+  if (const std::optional<ShapeHandle> handle = handleAt(point); handle.has_value()) {
+    dragController_.begin(ResizeState::instance(), {.shape = *selectedShape_,
+                                                    .origin = point,
+                                                    .imageBounds = imageBounds(),
+                                                    .handle = handle,
+                                                    .previousSelection = selectedShape_});
     viewport()->update();
     event->accept();
     return;
   }
 
   if (::quickshot::Shape* hitShape = shapeAt(point); hitShape != nullptr) {
-    clearUndoHistoryForUntrackedEdit();
+    ::quickshot::Shape* previousSelection = selectedShape_;
     selectedShape_ = hitShape;
-    dragState_ = std::make_unique<MoveState>(*selectedShape_, point, imageBounds());
+    dragController_.begin(MoveState::instance(), {.shape = *selectedShape_,
+                                                  .origin = point,
+                                                  .imageBounds = imageBounds(),
+                                                  .handle = std::nullopt,
+                                                  .previousSelection = previousSelection});
     viewport()->update();
     event->accept();
     return;
@@ -316,14 +326,18 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 
   if (creationType_.has_value()) {
     const ShapeType creationType = *creationType_;
-    clearUndoHistoryForUntrackedEdit();
+    ::quickshot::Shape* previousSelection = selectedShape_;
     const QRectF initialBounds{point, point};
     std::unique_ptr<::quickshot::Shape> shape =
         ::quickshot::Shape::make(creationType, initialBounds);
 
     selectedShape_ = shape.get();
     shapes_.push_back(std::move(shape));
-    dragState_ = std::make_unique<CreateState>(*selectedShape_, point, imageBounds());
+    dragController_.begin(CreateState::instance(), {.shape = *selectedShape_,
+                                                    .origin = point,
+                                                    .imageBounds = imageBounds(),
+                                                    .handle = std::nullopt,
+                                                    .previousSelection = previousSelection});
     viewport()->update();
     event->accept();
     return;
@@ -335,16 +349,14 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void QDrawWidget::mouseReleaseEvent(QMouseEvent* event) {
-  if (dragState_ == nullptr || event->button() != dragState_->completionButton()) {
+  if (!dragController_.isActive() || event->button() != dragController_.completionButton()) {
     QAbstractScrollArea::mouseReleaseEvent(event);
     return;
   }
 
-  const DragResult result = dragState_->finish();
-  dragState_.reset();
-  if (result == DragResult::RemoveShape) {
-    shapes_.pop_back();
-    selectedShape_ = nullptr;
+  std::optional<DragCompletion> completion = dragController_.finish();
+  if (completion.has_value()) {
+    completeDrag(std::move(*completion));
   }
 
   updateHoverCursor(imagePosition(event->position()));
@@ -440,26 +452,26 @@ QRectF QDrawWidget::imageBounds() const {
   return nullptr;
 }
 
-std::optional<HandlePosition> QDrawWidget::handleAt(const QPointF& point) const {
+std::optional<ShapeHandle> QDrawWidget::handleAt(const QPointF& point) const {
   if (selectedShape_ == nullptr) {
     return std::nullopt;
   }
 
   for (const ShapeHandle& handle : selectedShape_->handles()) {
-    if (handleRect(*selectedShape_, handle.position()).contains(point)) {
-      return handle.position();
+    if (handleRect(*selectedShape_, handle).contains(point)) {
+      return handle;
     }
   }
   return std::nullopt;
 }
 
-QRectF QDrawWidget::handleRect(const ::quickshot::Shape& shape, HandlePosition position) const {
+QRectF QDrawWidget::handleRect(const ::quickshot::Shape& shape, const ShapeHandle& handle) const {
   // Convert the fixed viewport handle size to image coordinates so zooming does
   // not change its on-screen size.
   const qreal imageHandleSize = handleSize / zoomFactor_;
   // Use the transformed center because rotated shape handles no longer lie on
   // the axis-aligned bounding rectangle.
-  const QPointF center = shape.handleCenter(ShapeHandle{position});
+  const QPointF center = shape.handleCenter(handle);
   const qreal halfSize = imageHandleSize / 2.0;
   return {center.x() - halfSize, center.y() - halfSize, imageHandleSize, imageHandleSize};
 }
@@ -474,8 +486,8 @@ QRectF QDrawWidget::constrainedMove(const QRectF& bounds, const QPointF& offset)
 }
 
 void QDrawWidget::updateHoverCursor(const QPointF& point) {
-  if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
-    viewport()->setCursor(ShapeHandle{*handle}.cursorShape());
+  if (const std::optional<ShapeHandle> handle = handleAt(point); handle.has_value()) {
+    viewport()->setCursor(handle->cursorShape());
     return;
   }
 
@@ -497,13 +509,12 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
   painter.save();
   painter.setPen(handlePen);
   painter.setBrush(QBrush{Qt::white});
-  const std::optional<HandlePosition> activeHandle =
-      dragState_ != nullptr ? dragState_->activeHandle() : std::nullopt;
+  const std::optional<ShapeHandle> activeHandle = dragController_.activeHandle();
   for (const ShapeHandle& handle : selectedShape_->handles()) {
-    if (activeHandle.has_value() && handle.position() != *activeHandle) {
+    if (activeHandle.has_value() && handle != *activeHandle) {
       continue;
     }
-    painter.drawRect(handleRect(*selectedShape_, handle.position()));
+    painter.drawRect(handleRect(*selectedShape_, handle));
   }
   painter.restore();
 }
@@ -532,9 +543,66 @@ void QDrawWidget::pushCommand(std::unique_ptr<QUndoCommand> command) {
   undoStack_.push(command.release());
 }
 
+// Commit a finished gesture as one undoable transaction, or discard an invalid creation.
+void QDrawWidget::completeDrag(DragCompletion completion) {
+  const auto position = std::ranges::find_if(
+      shapes_, [&completion](const std::unique_ptr<::quickshot::Shape>& shape) {
+        return shape.get() == completion.shape;
+      });
+  if (position == shapes_.end()) {
+    return;
+  }
+
+  if (completion.result == DragResult::RemoveShape) {
+    shapes_.erase(position);
+    selectedShape_ = completion.previousSelection;
+    return;
+  }
+
+  if (completion.createsShape) {
+    const auto insertionIndex = static_cast<std::size_t>(std::distance(shapes_.begin(), position));
+    std::unique_ptr<::quickshot::Shape> shape = std::move(*position);
+    shapes_.erase(position);
+    selectedShape_ = completion.previousSelection;
+    pushCommand(std::make_unique<CreateShapeCommand>(*this, std::move(shape), insertionIndex,
+                                                     completion.previousSelection));
+    return;
+  }
+
+  if (completion.before == nullptr || completion.after == nullptr ||
+      completion.before->equals(*completion.after)) {
+    return;
+  }
+
+  pushCommand(std::make_unique<TransformShapeCommand>(
+      *this, *completion.shape, std::move(completion.before), std::move(completion.after),
+      completion.undoText));
+}
+
+// Roll back the live drag preview before another command mutates the same shape model.
+void QDrawWidget::cancelDrag() {
+  const std::optional<DragCompletion> cancellation = dragController_.cancel();
+  if (!cancellation.has_value()) {
+    return;
+  }
+
+  if (cancellation->result == DragResult::RemoveShape) {
+    const auto position = std::ranges::find_if(
+        shapes_, [&cancellation](const std::unique_ptr<::quickshot::Shape>& shape) {
+          return shape.get() == cancellation->shape;
+        });
+    if (position != shapes_.end()) {
+      shapes_.erase(position);
+    }
+  }
+  selectedShape_ = cancellation->previousSelection;
+  viewport()->update();
+}
+
 void QDrawWidget::clearUndoHistoryForUntrackedEdit() {
-  // A stack can only replay a consistent timeline. Drag edits will stop clearing
-  // history once they also produce commands with before/after state.
+  cancelDrag();
+  // Image rotation changes both the bitmap and every shape's coordinate system;
+  // keep it outside the shape-only undo timeline for now.
   undoStack_.clear();
 }
 

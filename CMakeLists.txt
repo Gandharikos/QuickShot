@@ -26,21 +26,22 @@ endif()
 add_library(
   quickshot_ui STATIC
   src/commands/shape_commands.cpp
-  src/drag_state.cpp
+  src/drag_controller.cpp
   src/main_window.cpp
   src/qdrawwidget.cpp
   src/roi_exporter.cpp
   src/shapes/ellipse.cpp
   src/shapes/rectangle.cpp
+  src/shapes/rectangular_shape.cpp
   src/shapes/shape.cpp
-  src/shapes/shape_handle.cpp
   include/quickshot/commands/shape_commands.hpp
-  include/quickshot/drag_state.hpp
+  include/quickshot/drag_controller.hpp
   include/quickshot/main_window.hpp
   include/quickshot/qdrawwidget.hpp
   include/quickshot/roi_exporter.hpp
   include/quickshot/shapes/ellipse.hpp
   include/quickshot/shapes/rectangle.hpp
+  include/quickshot/shapes/rectangular_shape.hpp
   include/quickshot/shapes/shape.hpp
   include/quickshot/shapes/shape_handle.hpp)
 target_include_directories(quickshot_ui PUBLIC include)
@@ -76,8 +77,8 @@ install(TARGETS quickshot RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 if(BUILD_TESTING)
   find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
-  qt_add_executable(drag_state_tests tests/drag_state_test.cpp)
-  target_link_libraries(drag_state_tests PRIVATE quickshot_ui Qt6::Test)
+  qt_add_executable(drag_controller_tests tests/drag_controller_test.cpp)
+  target_link_libraries(drag_controller_tests PRIVATE quickshot_ui Qt6::Test)
 
   qt_add_executable(quickshot_tests tests/main_window_test.cpp)
   target_link_libraries(quickshot_tests PRIVATE quickshot_ui Qt6::Test)
@@ -85,9 +86,9 @@ if(BUILD_TESTING)
   qt_add_executable(shape_tests tests/shape_test.cpp)
   target_link_libraries(shape_tests PRIVATE quickshot_ui Qt6::Test)
 
-  add_test(NAME drag_state_tests COMMAND drag_state_tests)
+  add_test(NAME drag_controller_tests COMMAND drag_controller_tests)
   add_test(NAME quickshot_tests COMMAND quickshot_tests)
   add_test(NAME shape_tests COMMAND shape_tests)
-  set_tests_properties(drag_state_tests quickshot_tests shape_tests
+  set_tests_properties(drag_controller_tests quickshot_tests shape_tests
                        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

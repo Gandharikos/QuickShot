@@ -23,8 +23,8 @@ private slots:
   void clonePreservesConcreteShape();
   void rotationTransformsPathAndHandles();
   void movesAndTransformsGeometry();
-  void sizeHandleProvidesHitAreaAndCursor();
-  void sizeHandleProvidesOppositePosition();
+  void shapeHandlesExposeIdsCentersAndCursors();
+  void geometryMementoRestoresResize();
   void extractsRectangleRoi();
   void extractsTransparentEllipseRoi();
   void extractsRotatedRoi();
@@ -55,8 +55,10 @@ void ShapeTest::rectangleProvidesEightHandles() {
   QVERIFY(rectangle.contains({20.0, 30.0}));
   QVERIFY(!rectangle.contains({5.0, 5.0}));
   QCOMPARE(rectangle.handles().size(), std::size_t{8});
-  QCOMPARE(rectangle.handles().front().position(), quickshot::HandlePosition::TopLeft);
-  QCOMPARE(rectangle.handles().back().position(), quickshot::HandlePosition::Left);
+  QCOMPARE(rectangle.handles().front().id(),
+           quickshot::ShapeHandle{quickshot::HandlePosition::TopLeft}.id());
+  QCOMPARE(rectangle.handles().back().id(),
+           quickshot::ShapeHandle{quickshot::HandlePosition::Left}.id());
 }
 
 void ShapeTest::ellipseProvidesEightHandles() {
@@ -66,8 +68,10 @@ void ShapeTest::ellipseProvidesEightHandles() {
   QVERIFY(ellipse.contains(ellipse.boundingRect().center()));
   QVERIFY(!ellipse.contains(ellipse.boundingRect().topLeft()));
   QCOMPARE(ellipse.handles().size(), std::size_t{8});
-  QCOMPARE(ellipse.handles().front().position(), quickshot::HandlePosition::TopLeft);
-  QCOMPARE(ellipse.handles().back().position(), quickshot::HandlePosition::Left);
+  QCOMPARE(ellipse.handles().front().id(),
+           quickshot::ShapeHandle{quickshot::HandlePosition::TopLeft}.id());
+  QCOMPARE(ellipse.handles().back().id(),
+           quickshot::ShapeHandle{quickshot::HandlePosition::Left}.id());
 }
 
 void ShapeTest::clonePreservesConcreteShape() {
@@ -107,29 +111,32 @@ void ShapeTest::movesAndTransformsGeometry() {
   QCOMPARE(rectangle.boundingRect(), QRectF(30.0, 30.0, 60.0, 120.0));
 }
 
-void ShapeTest::sizeHandleProvidesHitAreaAndCursor() {
-  const QRectF bounds{10.0, 20.0, 30.0, 40.0};
+void ShapeTest::shapeHandlesExposeIdsCentersAndCursors() {
+  const quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 30.0, 40.0}};
   const quickshot::ShapeHandle topHandle{quickshot::HandlePosition::Top};
   const quickshot::ShapeHandle bottomRightHandle{quickshot::HandlePosition::BottomRight};
+  const quickshot::ShapeHandle polygonVertexHandle{42, Qt::CrossCursor};
 
-  QCOMPARE(topHandle.center(bounds), QPointF(25.0, 20.0));
-  QCOMPARE(topHandle.hitRect(bounds, 8.0), QRectF(21.0, 16.0, 8.0, 8.0));
+  QCOMPARE(rectangle.handleCenter(topHandle), QPointF(25.0, 20.0));
   QCOMPARE(topHandle.cursorShape(), Qt::SizeVerCursor);
-  QCOMPARE(bottomRightHandle.center(bounds), QPointF(40.0, 60.0));
+  QCOMPARE(rectangle.handleCenter(bottomRightHandle), QPointF(40.0, 60.0));
   QCOMPARE(bottomRightHandle.cursorShape(), Qt::SizeFDiagCursor);
+  QCOMPARE(polygonVertexHandle.id(), quickshot::ShapeHandle::Id{42});
+  QCOMPARE(polygonVertexHandle.cursorShape(), Qt::CrossCursor);
 }
 
-void ShapeTest::sizeHandleProvidesOppositePosition() {
-  using enum quickshot::HandlePosition;
+void ShapeTest::geometryMementoRestoresResize() {
+  quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 30.0, 40.0}};
+  rectangle.setRotationDegrees(15.0);
+  const std::unique_ptr<quickshot::ShapeGeometry> initialGeometry = rectangle.captureGeometry();
 
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(TopLeft), BottomRight);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Top), Bottom);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(TopRight), BottomLeft);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Right), Left);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(BottomRight), TopLeft);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Bottom), Top);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(BottomLeft), TopRight);
-  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Left), Right);
+  rectangle.resize(*initialGeometry, quickshot::ShapeHandle{quickshot::HandlePosition::BottomRight},
+                   {80.0, 70.0}, {0.0, 0.0, 100.0, 80.0});
+  QVERIFY(rectangle.boundingRect() != QRectF(10.0, 20.0, 30.0, 40.0));
+
+  rectangle.restoreGeometry(*initialGeometry);
+  QCOMPARE(rectangle.boundingRect(), QRectF(10.0, 20.0, 30.0, 40.0));
+  QCOMPARE(rectangle.rotationDegrees(), 15.0);
 }
 
 void ShapeTest::extractsRectangleRoi() {

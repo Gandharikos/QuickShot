@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QIcon>
 #include <QImageReader>
+#include <QKeySequence>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
@@ -18,6 +19,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QStyle>
 #include <QSvgRenderer>
 #include <QToolBar>
 
@@ -79,6 +81,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   drawWidget_->setObjectName("drawWidget");
 
   toolbar->addWidget(openButton);
+  toolbar->addSeparator();
+
+  QAction* undoAction = drawWidget_->undoStack().createUndoAction(this, tr("Undo"));
+  QAction* redoAction = drawWidget_->undoStack().createRedoAction(this, tr("Redo"));
+  undoAction->setObjectName("undoAction");
+  redoAction->setObjectName("redoAction");
+  undoAction->setIcon(
+      QIcon::fromTheme(QStringLiteral("edit-undo"), style()->standardIcon(QStyle::SP_ArrowBack)));
+  redoAction->setIcon(QIcon::fromTheme(QStringLiteral("edit-redo"),
+                                       style()->standardIcon(QStyle::SP_ArrowForward)));
+  undoAction->setShortcut(QKeySequence::Undo);
+  redoAction->setShortcut(QKeySequence::Redo);
+  toolbar->addAction(undoAction);
+  toolbar->addAction(redoAction);
   toolbar->addSeparator();
 
   auto* rotateLeftAction = toolbar->addAction(

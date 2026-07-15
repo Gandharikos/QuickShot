@@ -13,6 +13,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
+#include <QKeySequence>
 #include <QLineF>
 #include <QMenu>
 #include <QPointF>
@@ -128,6 +129,7 @@ private slots:
   void remembersLastOpenDirectory();
   void synchronizesToolbarZoomControl();
   void enablesAndRunsRotationActions();
+  void undoesAndRedoesDragOperations();
   void createsMovesAndResizesShapes();
   void hidesInactiveHandlesWhileResizing();
   void contextMenusCloneAndDeleteShapes();
@@ -158,6 +160,8 @@ void MainWindowTest::providesImageControls() {
   const auto* toolbar = window.findChild<QToolBar*>("mainToolBar");
   const auto* rotateLeftAction = window.findChild<QAction*>("rotateLeftAction");
   const auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
+  const auto* undoAction = window.findChild<QAction*>("undoAction");
+  const auto* redoAction = window.findChild<QAction*>("redoAction");
   const auto* rectangleAction = window.findChild<QAction*>("rectangleAction");
   const auto* ellipseAction = window.findChild<QAction*>("ellipseAction");
   const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
@@ -170,6 +174,8 @@ void MainWindowTest::providesImageControls() {
   QCOMPARE(toolbar->toolButtonStyle(), Qt::ToolButtonIconOnly);
   QVERIFY(rotateLeftAction != nullptr);
   QVERIFY(rotateRightAction != nullptr);
+  QVERIFY(undoAction != nullptr);
+  QVERIFY(redoAction != nullptr);
   QVERIFY(rectangleAction != nullptr);
   QVERIFY(ellipseAction != nullptr);
   QVERIFY(zoomFactorSpinBox != nullptr);
@@ -179,6 +185,12 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(!rotateRightAction->icon().isNull());
   QVERIFY(!rotateLeftAction->isEnabled());
   QVERIFY(!rotateRightAction->isEnabled());
+  QVERIFY(!undoAction->isEnabled());
+  QVERIFY(!redoAction->isEnabled());
+  QVERIFY(!undoAction->icon().isNull());
+  QVERIFY(!redoAction->icon().isNull());
+  QCOMPARE(undoAction->shortcut(), QKeySequence{QKeySequence::Undo});
+  QCOMPARE(redoAction->shortcut(), QKeySequence{QKeySequence::Redo});
   QVERIFY(rectangleAction->isCheckable());
   QVERIFY(ellipseAction->isCheckable());
   QVERIFY(!rectangleAction->icon().isNull());
@@ -191,14 +203,17 @@ void MainWindowTest::providesImageControls() {
   QCOMPARE(zoomFactorSpinBox->maximum(), 8.0);
 
   const QList<QAction*> toolbarActions = toolbar->actions();
-  QCOMPARE(toolbarActions.size(), qsizetype{8});
+  QCOMPARE(toolbarActions.size(), qsizetype{11});
   QVERIFY(toolbarActions.at(1)->isSeparator());
-  QCOMPARE(toolbarActions.at(2), rotateLeftAction);
-  QCOMPARE(toolbarActions.at(3), rotateRightAction);
-  QCOMPARE(toolbar->widgetForAction(toolbarActions.at(4)), zoomFactorSpinBox);
-  QVERIFY(toolbarActions.at(5)->isSeparator());
-  QCOMPARE(toolbarActions.at(6), rectangleAction);
-  QCOMPARE(toolbarActions.at(7), ellipseAction);
+  QCOMPARE(toolbarActions.at(2), undoAction);
+  QCOMPARE(toolbarActions.at(3), redoAction);
+  QVERIFY(toolbarActions.at(4)->isSeparator());
+  QCOMPARE(toolbarActions.at(5), rotateLeftAction);
+  QCOMPARE(toolbarActions.at(6), rotateRightAction);
+  QCOMPARE(toolbar->widgetForAction(toolbarActions.at(7)), zoomFactorSpinBox);
+  QVERIFY(toolbarActions.at(8)->isSeparator());
+  QCOMPARE(toolbarActions.at(9), rectangleAction);
+  QCOMPARE(toolbarActions.at(10), ellipseAction);
 }
 
 void MainWindowTest::remembersLastOpenDirectory() {
@@ -345,6 +360,81 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
 }
 
+void MainWindowTest::undoesAndRedoesDragOperations() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("drag-undo.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::MainWindow window;
+  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* undoAction = window.findChild<QAction*>("undoAction");
+  auto* redoAction = window.findChild<QAction*>("redoAction");
+  QVERIFY(drawWidget != nullptr);
+  QVERIFY(undoAction != nullptr);
+  QVERIFY(redoAction != nullptr);
+  window.resize(220, 180);
+  QVERIFY(drawWidget->loadImage(imagePath));
+  window.show();
+  QCoreApplication::processEvents();
+
+  drawWidget->setCreationMode(quickshot::ShapeType::Rectangle, true);
+  drag(drawWidget->viewport(), {20, 20}, {80, 60});
+  QCOMPARE(drawWidget->undoStack().count(), 1);
+  QCOMPARE(drawWidget->undoStack().undoText(), QStringLiteral("Create Shape"));
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QVERIFY(undoAction->isEnabled());
+  QVERIFY(!redoAction->isEnabled());
+
+  undoAction->trigger();
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
+  QVERIFY(redoAction->isEnabled());
+  redoAction->trigger();
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(20.0, 20.0, 60.0, 40.0));
+
+  QTest::mousePress(drawWidget->viewport(), Qt::LeftButton, Qt::NoModifier, {50, 40});
+  QTest::mouseMove(drawWidget->viewport(), {60, 50});
+  undoAction->trigger();
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
+  QTest::mouseRelease(drawWidget->viewport(), Qt::LeftButton, Qt::NoModifier, {60, 50});
+  redoAction->trigger();
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(20.0, 20.0, 60.0, 40.0));
+
+  drag(drawWidget->viewport(), {50, 40}, {60, 50});
+  QCOMPARE(drawWidget->undoStack().count(), 2);
+  QCOMPARE(drawWidget->undoStack().undoText(), QStringLiteral("Move Shape"));
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(30.0, 30.0, 60.0, 40.0));
+  drawWidget->undoStack().undo();
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(20.0, 20.0, 60.0, 40.0));
+  drawWidget->undoStack().redo();
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(30.0, 30.0, 60.0, 40.0));
+
+  drag(drawWidget->viewport(), {90, 70}, {110, 90});
+  QCOMPARE(drawWidget->undoStack().count(), 3);
+  QCOMPARE(drawWidget->undoStack().undoText(), QStringLiteral("Resize Shape"));
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(30.0, 30.0, 80.0, 60.0));
+  drawWidget->undoStack().undo();
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(30.0, 30.0, 60.0, 40.0));
+  drawWidget->undoStack().redo();
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(30.0, 30.0, 80.0, 60.0));
+
+  QTest::mousePress(drawWidget->viewport(), Qt::RightButton, Qt::NoModifier, {110, 60});
+  QTest::mouseMove(drawWidget->viewport(), {70, 100});
+  QTest::mouseRelease(drawWidget->viewport(), Qt::RightButton, Qt::NoModifier, {70, 100});
+  QCoreApplication::processEvents();
+  QCOMPARE(drawWidget->undoStack().count(), 4);
+  QCOMPARE(drawWidget->undoStack().undoText(), QStringLiteral("Rotate Shape"));
+  QVERIFY(qAbs(drawWidget->shapeAt(0)->rotationDegrees() - 90.0) < 0.0001);
+  drawWidget->undoStack().undo();
+  QCOMPARE(drawWidget->shapeAt(0)->rotationDegrees(), 0.0);
+  drawWidget->undoStack().redo();
+  QVERIFY(qAbs(drawWidget->shapeAt(0)->rotationDegrees() - 90.0) < 0.0001);
+}
+
 void MainWindowTest::createsMovesAndResizesShapes() {
   QTemporaryDir temporaryDirectory;
   QVERIFY(temporaryDirectory.isValid());
@@ -445,7 +535,7 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
 
   QVERIFY(triggerContextMenuAction(drawWidget, {60, 50}, "cloneShapeAction"));
   QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
-  QCOMPARE(drawWidget.undoStack().count(), 1);
+  QCOMPARE(drawWidget.undoStack().count(), 2);
   QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(30.0, 30.0, 60.0, 60.0));
   const QImage clonedShapes = renderViewport(drawWidget);
   QVERIFY(hasColorNear(clonedShapes, {30, 45}, Qt::red));
@@ -459,7 +549,7 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
 
   QVERIFY(triggerContextMenuAction(drawWidget, {35, 50}, "deleteShapeAction"));
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
-  QCOMPARE(drawWidget.undoStack().count(), 2);
+  QCOMPARE(drawWidget.undoStack().count(), 3);
 
   drawWidget.undoStack().undo();
   QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
@@ -469,7 +559,7 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
 
   QVERIFY(triggerContextMenuAction(drawWidget, {180, 130}, "deleteAllShapesAction"));
   QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
-  QCOMPARE(drawWidget.undoStack().count(), 3);
+  QCOMPARE(drawWidget.undoStack().count(), 4);
 
   drawWidget.undoStack().undo();
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
