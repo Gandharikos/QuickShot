@@ -11,15 +11,28 @@
 
 namespace quickshot {
 
+const std::unordered_map<ShapeType, Shape::Factory>& Shape::factories() {
+  static const std::unordered_map<ShapeType, Factory> registeredFactories{
+      {ShapeType::Rectangle,
+       [](const QRectF& bounds) -> std::unique_ptr<Shape> {
+         return std::make_unique<Rectangle>(bounds);
+       }},
+      {ShapeType::Ellipse,
+       [](const QRectF& bounds) -> std::unique_ptr<Shape> {
+         return std::make_unique<Ellipse>(bounds);
+       }},
+  };
+  return registeredFactories;
+}
+
 std::unique_ptr<Shape> Shape::make(ShapeType type, const QRectF& bounds) {
-  switch (type) {
-  case ShapeType::Rectangle:
-    return std::make_unique<Rectangle>(bounds);
-  case ShapeType::Ellipse:
-    return std::make_unique<Ellipse>(bounds);
+  const auto& registeredFactories = factories();
+  const auto factory = registeredFactories.find(type);
+  if (factory == registeredFactories.end()) {
+    throw std::invalid_argument{"Unregistered ShapeType"};
   }
 
-  throw std::invalid_argument{"Unknown ShapeType"};
+  return factory->second(bounds);
 }
 
 qreal Shape::rotationDegrees() const noexcept { return rotationDegrees_; }

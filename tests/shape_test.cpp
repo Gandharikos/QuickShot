@@ -11,6 +11,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTransform>
+#include <stdexcept>
 
 class ShapeTest final : public QObject {
   Q_OBJECT
@@ -41,6 +42,9 @@ void ShapeTest::factoryCreatesConcreteShapes() {
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipse.get()) != nullptr);
   QCOMPARE(rectangle->boundingRect(), bounds);
   QCOMPARE(ellipse->boundingRect(), bounds);
+  QVERIFY_EXCEPTION_THROWN(
+      static_cast<void>(quickshot::Shape::make(quickshot::ShapeType::Count, bounds)),
+      std::invalid_argument);
 }
 
 void ShapeTest::rectangleProvidesEightHandles() {

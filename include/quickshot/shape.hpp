@@ -6,17 +6,21 @@
 #include <QPointF>
 #include <QRectF>
 #include <QTransform>
+#include <functional>
 #include <memory>
 #include <span>
+#include <unordered_map>
 
 class QPainter;
 
 namespace quickshot {
 
-enum class ShapeType { Rectangle, Ellipse };
+enum class ShapeType { Rectangle, Ellipse, Count };
 
 class Shape {
 public:
+  using Factory = std::function<std::unique_ptr<Shape>(const QRectF&)>;
+
   Shape() = default;
   virtual ~Shape() = default;
 
@@ -47,6 +51,8 @@ protected:
   [[nodiscard]] QPainterPath mapPathToImage(const QPainterPath& shapePath) const;
 
 private:
+  [[nodiscard]] static const std::unordered_map<ShapeType, Factory>& factories();
+
   qreal rotationDegrees_ = 0.0;
 };
 
