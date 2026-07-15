@@ -84,6 +84,7 @@ QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent), undoSta
   setFrameShape(QFrame::NoFrame);
   viewport()->setAutoFillBackground(false);
   viewport()->setMouseTracking(true);
+  initializeContextActions();
 
   QSettings settings;
   lastSaveDirectory_ = settings.value(QStringLiteral("roi/lastSaveDirectory")).toString();
@@ -186,45 +187,69 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
   if (targetShape != nullptr) {
     selectedShape_ = targetShape;
     viewport()->update();
-
-    QAction* saveAction = menu.addAction(tr("Save ROI"));
-    saveAction->setObjectName("saveRoiAction");
-    QAction* cloneAction = menu.addAction(tr("Clone"));
-    cloneAction->setObjectName("cloneShapeAction");
-    QAction* deleteAction = menu.addAction(tr("Delete"));
-    deleteAction->setObjectName("deleteShapeAction");
-
-    connect(saveAction, &QAction::triggered, this,
-            [this, targetShape]() { saveRois({targetShape}); });
-    connect(cloneAction, &QAction::triggered, this, [this, targetShape]() {
-      pushCommand(std::make_unique<CloneShapeCommand>(*this, *targetShape));
-    });
-    connect(deleteAction, &QAction::triggered, this, [this, targetShape]() {
-      pushCommand(std::make_unique<DeleteShapeCommand>(*this, *targetShape));
-    });
-    menu.exec(event->globalPos());
+    menu.addActions({saveRoiAction_, cloneShapeAction_, deleteShapeAction_});
   } else {
-    QAction* saveAllAction = menu.addAction(tr("Save All"));
-    saveAllAction->setObjectName("saveAllRoisAction");
-    saveAllAction->setEnabled(!shapes_.empty());
-    QAction* deleteAllAction = menu.addAction(tr("Delete All"));
-    deleteAllAction->setObjectName("deleteAllShapesAction");
-    deleteAllAction->setEnabled(!shapes_.empty());
-
-    connect(saveAllAction, &QAction::triggered, this, [this]() {
-      std::vector<const ::quickshot::Shape*> targets;
-      targets.reserve(shapes_.size());
-      for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
-        targets.push_back(shape.get());
-      }
-      saveRois(targets);
-    });
-    connect(deleteAllAction, &QAction::triggered, this,
-            [this]() { pushCommand(std::make_unique<DeleteAllShapesCommand>(*this)); });
-    menu.exec(event->globalPos());
+    const bool hasShapes = !shapes_.empty();
+    saveAllRoisAction_->setEnabled(hasShapes);
+    deleteAllShapesAction_->setEnabled(hasShapes);
+    menu.addActions({saveAllRoisAction_, deleteAllShapesAction_});
   }
 
+  menu.exec(event->globalPos());
   event->accept();
+}
+
+void QDrawWidget::initializeContextActions() {
+  saveRoiAction_ = new QAction{tr("Save ROI"), this};
+  saveRoiAction_->setObjectName("saveRoiAction");
+  connect(saveRoiAction_, &QAction::triggered, this, &QDrawWidget::saveSelectedRoi);
+
+  cloneShapeAction_ = new QAction{tr("Clone"), this};
+  cloneShapeAction_->setObjectName("cloneShapeAction");
+  connect(cloneShapeAction_, &QAction::triggered, this, &QDrawWidget::cloneSelectedShape);
+
+  deleteShapeAction_ = new QAction{tr("Delete"), this};
+  deleteShapeAction_->setObjectName("deleteShapeAction");
+  connect(deleteShapeAction_, &QAction::triggered, this, &QDrawWidget::deleteSelectedShape);
+
+  saveAllRoisAction_ = new QAction{tr("Save All"), this};
+  saveAllRoisAction_->setObjectName("saveAllRoisAction");
+  connect(saveAllRoisAction_, &QAction::triggered, this, &QDrawWidget::saveAllRois);
+
+  deleteAllShapesAction_ = new QAction{tr("Delete All"), this};
+  deleteAllShapesAction_->setObjectName("deleteAllShapesAction");
+  connect(deleteAllShapesAction_, &QAction::triggered, this, &QDrawWidget::deleteAllShapes);
+}
+
+void QDrawWidget::saveSelectedRoi() {
+  if (selectedShape_ != nullptr) {
+    saveRois({selectedShape_});
+  }
+}
+
+void QDrawWidget::cloneSelectedShape() {
+  if (selectedShape_ != nullptr) {
+    pushCommand(std::make_unique<CloneShapeCommand>(*this, *selectedShape_));
+  }
+}
+
+void QDrawWidget::deleteSelectedShape() {
+  if (selectedShape_ != nullptr) {
+    pushCommand(std::make_unique<DeleteShapeCommand>(*this, *selectedShape_));
+  }
+}
+
+void QDrawWidget::saveAllRois() {
+  std::vector<const ::quickshot::Shape*> targets;
+  targets.reserve(shapes_.size());
+  for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+    targets.push_back(shape.get());
+  }
+  saveRois(targets);
+}
+
+void QDrawWidget::deleteAllShapes() {
+  pushCommand(std::make_unique<DeleteAllShapesCommand>(*this));
 }
 
 void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {

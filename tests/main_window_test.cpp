@@ -93,7 +93,13 @@ bool triggerContextMenuAction(quickshot::QDrawWidget& drawWidget, const QPoint& 
       return;
     }
 
-    auto* action = menu->findChild<QAction*>(actionName);
+    QAction* action = nullptr;
+    for (QAction* candidate : menu->actions()) {
+      if (candidate->objectName() == QLatin1String{actionName}) {
+        action = candidate;
+        break;
+      }
+    }
     if (action == nullptr) {
       menu->close();
       return;

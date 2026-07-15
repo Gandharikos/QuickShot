@@ -12,6 +12,7 @@
 #include <vector>
 
 class QContextMenuEvent;
+class QAction;
 class QMouseEvent;
 class QPainter;
 class QPaintEvent;
@@ -69,6 +70,12 @@ private:
   [[nodiscard]] std::optional<HandlePosition> handleAt(const QPointF& point) const;
   [[nodiscard]] QRectF handleRect(const ::quickshot::Shape& shape, HandlePosition position) const;
   [[nodiscard]] QRectF constrainedMove(const QRectF& bounds, const QPointF& offset) const;
+  void initializeContextActions();
+  void saveSelectedRoi();
+  void cloneSelectedShape();
+  void deleteSelectedShape();
+  void saveAllRois();
+  void deleteAllShapes();
   void updateHoverCursor(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
   [[nodiscard]] std::unique_ptr<::quickshot::Shape>
@@ -86,6 +93,11 @@ private:
   std::optional<ShapeType> creationType_;
   std::unique_ptr<DragState> dragState_;
   QUndoStack undoStack_;
+  QAction* saveRoiAction_ = nullptr;
+  QAction* cloneShapeAction_ = nullptr;
+  QAction* deleteShapeAction_ = nullptr;
+  QAction* saveAllRoisAction_ = nullptr;
+  QAction* deleteAllShapesAction_ = nullptr;
   QString lastSaveDirectory_;
   qreal zoomFactor_ = 1.0;
   bool suppressContextMenu_ = false;
