@@ -21,6 +21,7 @@ class SizeHandle final {
 public:
   explicit constexpr SizeHandle(HandlePosition position) noexcept : position_(position) {}
 
+  [[nodiscard]] static HandlePosition oppositePosition(HandlePosition position) noexcept;
   [[nodiscard]] constexpr HandlePosition position() const noexcept { return position_; }
   [[nodiscard]] QPointF center(const QRectF& bounds) const;
   [[nodiscard]] QRectF hitRect(const QRectF& bounds, qreal size) const;

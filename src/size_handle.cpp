@@ -2,6 +2,29 @@
 
 namespace quickshot {
 
+HandlePosition SizeHandle::oppositePosition(HandlePosition position) noexcept {
+  switch (position) {
+  case HandlePosition::TopLeft:
+    return HandlePosition::BottomRight;
+  case HandlePosition::Top:
+    return HandlePosition::Bottom;
+  case HandlePosition::TopRight:
+    return HandlePosition::BottomLeft;
+  case HandlePosition::Right:
+    return HandlePosition::Left;
+  case HandlePosition::BottomRight:
+    return HandlePosition::TopLeft;
+  case HandlePosition::Bottom:
+    return HandlePosition::Top;
+  case HandlePosition::BottomLeft:
+    return HandlePosition::TopRight;
+  case HandlePosition::Left:
+    return HandlePosition::Right;
+  }
+
+  return position;
+}
+
 QPointF SizeHandle::center(const QRectF& bounds) const {
   switch (position_) {
   case HandlePosition::TopLeft:

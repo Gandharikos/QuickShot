@@ -56,29 +56,6 @@ QTransform rotationTransform(const QRectF& bounds, qreal degrees) {
   return transformation;
 }
 
-HandlePosition oppositeHandle(HandlePosition position) {
-  switch (position) {
-  case HandlePosition::TopLeft:
-    return HandlePosition::BottomRight;
-  case HandlePosition::Top:
-    return HandlePosition::Bottom;
-  case HandlePosition::TopRight:
-    return HandlePosition::BottomLeft;
-  case HandlePosition::Right:
-    return HandlePosition::Left;
-  case HandlePosition::BottomRight:
-    return HandlePosition::TopLeft;
-  case HandlePosition::Bottom:
-    return HandlePosition::Top;
-  case HandlePosition::BottomLeft:
-    return HandlePosition::TopRight;
-  case HandlePosition::Left:
-    return HandlePosition::Right;
-  }
-
-  return HandlePosition::BottomRight;
-}
-
 qreal mouseAngle(const QPointF& center, const QPointF& point) {
   return qRadiansToDegrees(std::atan2(point.y() - center.y(), point.x() - center.x()));
 }
@@ -311,7 +288,8 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
     dragStart_ = point;
     dragStartBounds_ = selectedShape_->boundingRect();
     dragStartImageToShape_ = selectedShape_->imageTransform().inverted();
-    resizeAnchorImage_ = selectedShape_->handleCenter(SizeHandle{oppositeHandle(*activeHandle_)});
+    resizeAnchorImage_ =
+        selectedShape_->handleCenter(SizeHandle{SizeHandle::oppositePosition(*activeHandle_)});
     dragStartRotation_ = selectedShape_->rotationDegrees();
     viewport()->update();
     event->accept();
@@ -386,8 +364,8 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
   }
 
   painter.setRenderHint(QPainter::SmoothPixmapTransform);
-  // Scrollbar values are offsets in scaled content coordinates, so translate in the opposite
-  // direction before scaling the image uniformly.
+  // Scrollbar values are offsets in scaled content coordinates, so translate in
+  // the opposite direction before scaling the image uniformly.
   painter.translate(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
   painter.scale(zoomFactor_, zoomFactor_);
   painter.drawImage(QPointF{0.0, 0.0}, image_);
@@ -407,12 +385,14 @@ void QDrawWidget::paintEvent(QPaintEvent* event) {
 
 void QDrawWidget::resizeEvent(QResizeEvent* event) {
   QAbstractScrollArea::resizeEvent(event);
-  // A resized viewport changes the visible page and therefore the valid scroll range.
+  // A resized viewport changes the visible page and therefore the valid scroll
+  // range.
   updateScrollBars();
 }
 
 void QDrawWidget::wheelEvent(QWheelEvent* event) {
-  // y() is vertical wheel rotation; x() carries horizontal input from tilt wheels or touchpads.
+  // y() is vertical wheel rotation; x() carries horizontal input from tilt
+  // wheels or touchpads.
   const int angleDelta = event->angleDelta().y();
   if (image_.isNull() || !event->modifiers().testFlag(Qt::ControlModifier) || angleDelta == 0) {
     QAbstractScrollArea::wheelEvent(event);
@@ -420,20 +400,23 @@ void QDrawWidget::wheelEvent(QWheelEvent* event) {
   }
 
   const qreal previousZoom = zoomFactor_;
-  // Qt reports angleDelta in eighths of a degree, so a typical 15-degree notch is 120 units;
-  // keeping a fractional step also supports high-resolution wheels.
+  // Qt reports angleDelta in eighths of a degree, so a typical 15-degree notch
+  // is 120 units; keeping a fractional step also supports high-resolution
+  // wheels.
   const qreal wheelSteps = static_cast<qreal>(angleDelta) / wheelStepAngle;
-  // Multiplication gives every notch the same relative visual change, while clamp keeps the
-  // resulting scale within the supported 10%-800% range.
+  // Multiplication gives every notch the same relative visual change, while
+  // clamp keeps the resulting scale within the supported 10%-800% range.
   setZoomFactor(previousZoom * std::pow(zoomPerWheelStep, wheelSteps));
 
-  // Compare floating-point values approximately; clamp can leave the scale unchanged at a limit.
+  // Compare floating-point values approximately; clamp can leave the scale
+  // unchanged at a limit.
   if (qFuzzyCompare(zoomFactor_, previousZoom)) {
     event->accept();
     return;
   }
 
-  // Keeping the scrollbar offsets unchanged makes the image's top-left corner the zoom anchor.
+  // Keeping the scrollbar offsets unchanged makes the image's top-left corner
+  // the zoom anchor.
   event->accept();
 }
 
@@ -566,10 +549,11 @@ void QDrawWidget::updateDraggedShape(const QPointF& point) {
   if (dragMode_ == DragMode::Resize && activeHandle_.has_value()) {
     const QPointF localPoint = dragStartImageToShape_.map(point);
     QRectF bounds = resizedBounds(dragStartBounds_, *activeHandle_, localPoint);
-    const HandlePosition anchorHandle = oppositeHandle(*activeHandle_);
+    const HandlePosition anchorHandle = SizeHandle::oppositePosition(*activeHandle_);
     const QPointF localAnchor = SizeHandle{anchorHandle}.center(bounds);
     const QPointF mappedAnchor = rotationTransform(bounds, dragStartRotation_).map(localAnchor);
-    // A resized frame has a new center; translate it so rotation does not move the opposite handle.
+    // A resized frame has a new center; translate it so rotation does not move
+    // the opposite handle.
     bounds.translate(resizeAnchorImage_ - mappedAnchor);
     selectedShape_->setBoundingRect(bounds);
     return;
@@ -725,7 +709,8 @@ void QDrawWidget::updateScrollBars() {
   const int horizontalMaximum = std::max(0, imageSize.width() - pageSize.width());
   const int verticalMaximum = std::max(0, imageSize.height() - pageSize.height());
 
-  // The page step is the visible extent; a zero maximum lets Qt hide an unnecessary scrollbar.
+  // The page step is the visible extent; a zero maximum lets Qt hide an
+  // unnecessary scrollbar.
   horizontalScrollBar()->setPageStep(pageSize.width());
   horizontalScrollBar()->setRange(0, horizontalMaximum);
 

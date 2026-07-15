@@ -24,6 +24,7 @@ private slots:
   void rotationTransformsPathAndHandles();
   void movesAndTransformsGeometry();
   void sizeHandleProvidesHitAreaAndCursor();
+  void sizeHandleProvidesOppositePosition();
   void extractsRectangleRoi();
   void extractsTransparentEllipseRoi();
   void extractsRotatedRoi();
@@ -116,6 +117,19 @@ void ShapeTest::sizeHandleProvidesHitAreaAndCursor() {
   QCOMPARE(topHandle.cursorShape(), Qt::SizeVerCursor);
   QCOMPARE(bottomRightHandle.center(bounds), QPointF(40.0, 60.0));
   QCOMPARE(bottomRightHandle.cursorShape(), Qt::SizeFDiagCursor);
+}
+
+void ShapeTest::sizeHandleProvidesOppositePosition() {
+  using enum quickshot::HandlePosition;
+
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(TopLeft), BottomRight);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(Top), Bottom);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(TopRight), BottomLeft);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(Right), Left);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(BottomRight), TopLeft);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(Bottom), Top);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(BottomLeft), TopRight);
+  QCOMPARE(quickshot::SizeHandle::oppositePosition(Left), Right);
 }
 
 void ShapeTest::extractsRectangleRoi() {
