@@ -1,4 +1,4 @@
-#include "quickshot/rectangle.hpp"
+#include "quickshot/shapes/rectangle.hpp"
 
 #include <QPainter>
 #include <memory>

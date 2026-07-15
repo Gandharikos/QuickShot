@@ -1,4 +1,4 @@
-#include "quickshot/size_handle.hpp"
+#include "quickshot/shapes/size_handle.hpp"
 
 namespace quickshot {
 

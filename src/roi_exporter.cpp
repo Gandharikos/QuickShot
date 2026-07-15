@@ -1,6 +1,6 @@
 #include "quickshot/roi_exporter.hpp"
 
-#include "quickshot/shape.hpp"
+#include "quickshot/shapes/shape.hpp"
 
 #include <QImageWriter>
 #include <QPainter>

@@ -1,7 +1,7 @@
-#include "quickshot/ellipse.hpp"
-#include "quickshot/rectangle.hpp"
 #include "quickshot/roi_exporter.hpp"
-#include "quickshot/size_handle.hpp"
+#include "quickshot/shapes/ellipse.hpp"
+#include "quickshot/shapes/rectangle.hpp"
+#include "quickshot/shapes/size_handle.hpp"
 
 #include <QColor>
 #include <QImage>

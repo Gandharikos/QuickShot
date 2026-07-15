@@ -1,4 +1,4 @@
-#include "quickshot/ellipse.hpp"
+#include "quickshot/shapes/ellipse.hpp"
 
 #include <QPainter>
 #include <memory>

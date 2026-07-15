@@ -1,5 +1,5 @@
 #include "quickshot/drag_state.hpp"
-#include "quickshot/rectangle.hpp"
+#include "quickshot/shapes/rectangle.hpp"
 
 #include <QPointF>
 #include <QRectF>

@@ -2,7 +2,7 @@
 
 #include "quickshot/drag_state.hpp"
 #include "quickshot/roi_exporter.hpp"
-#include "quickshot/shape.hpp"
+#include "quickshot/shapes/shape.hpp"
 
 #include <QAction>
 #include <QBrush>

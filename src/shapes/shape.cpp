@@ -1,7 +1,7 @@
-#include "quickshot/shape.hpp"
+#include "quickshot/shapes/shape.hpp"
 
-#include "quickshot/ellipse.hpp"
-#include "quickshot/rectangle.hpp"
+#include "quickshot/shapes/ellipse.hpp"
+#include "quickshot/shapes/rectangle.hpp"
 
 #include <QLineF>
 #include <QtMath>

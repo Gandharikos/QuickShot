@@ -1,6 +1,6 @@
 #include "quickshot/drag_state.hpp"
 
-#include "quickshot/shape.hpp"
+#include "quickshot/shapes/shape.hpp"
 
 #include <QtMath>
 #include <algorithm>

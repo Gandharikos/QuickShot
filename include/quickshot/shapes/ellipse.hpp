@@ -1,14 +1,14 @@
 #pragma once
 
-#include "quickshot/shape.hpp"
+#include "quickshot/shapes/shape.hpp"
 
 #include <array>
 
 namespace quickshot {
 
-class Rectangle final : public Shape {
+class Ellipse final : public Shape {
 public:
-  explicit Rectangle(const QRectF& bounds);
+  explicit Ellipse(const QRectF& bounds);
 
   [[nodiscard]] std::unique_ptr<Shape> clone() const override;
   void draw(QPainter& painter) const override;

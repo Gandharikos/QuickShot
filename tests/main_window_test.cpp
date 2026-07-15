@@ -1,6 +1,6 @@
 #include "quickshot/main_window.hpp"
 #include "quickshot/qdrawwidget.hpp"
-#include "quickshot/shape.hpp"
+#include "quickshot/shapes/shape.hpp"
 
 #include <QAction>
 #include <QApplication>
