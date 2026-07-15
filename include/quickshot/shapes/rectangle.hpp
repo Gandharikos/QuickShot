@@ -15,14 +15,14 @@ public:
   [[nodiscard]] QRectF boundingRect() const override;
   void setBoundingRect(const QRectF& bounds) override;
   [[nodiscard]] QPainterPath path() const override;
-  [[nodiscard]] std::span<const SizeHandle> handles() const noexcept override;
+  [[nodiscard]] std::span<const ShapeHandle> handles() const noexcept override;
 
 private:
   static constexpr std::array handles_ = {
-      SizeHandle{HandlePosition::TopLeft},     SizeHandle{HandlePosition::Top},
-      SizeHandle{HandlePosition::TopRight},    SizeHandle{HandlePosition::Right},
-      SizeHandle{HandlePosition::BottomRight}, SizeHandle{HandlePosition::Bottom},
-      SizeHandle{HandlePosition::BottomLeft},  SizeHandle{HandlePosition::Left},
+      ShapeHandle{HandlePosition::TopLeft},     ShapeHandle{HandlePosition::Top},
+      ShapeHandle{HandlePosition::TopRight},    ShapeHandle{HandlePosition::Right},
+      ShapeHandle{HandlePosition::BottomRight}, ShapeHandle{HandlePosition::Bottom},
+      ShapeHandle{HandlePosition::BottomLeft},  ShapeHandle{HandlePosition::Left},
   };
 
   QRectF bounds_;

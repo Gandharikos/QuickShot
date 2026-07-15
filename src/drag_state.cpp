@@ -113,14 +113,14 @@ ResizeState::ResizeState(Shape& shape, HandlePosition handle, const QRectF& limi
     : DragState(Qt::LeftButton), shape_(shape), handle_(handle),
       initialBounds_(shape.boundingRect()), limits_(limits),
       imageToShape_(shape.imageTransform().inverted()),
-      anchorImage_(shape.handleCenter(SizeHandle{SizeHandle::oppositePosition(handle)})),
+      anchorImage_(shape.handleCenter(ShapeHandle{ShapeHandle::oppositePosition(handle)})),
       initialRotation_(shape.rotationDegrees()) {}
 
 void ResizeState::update(const QPointF& point) {
   const QPointF localPoint = imageToShape_.map(point);
   QRectF bounds = resizedBounds(initialBounds_, handle_, localPoint, limits_);
-  const HandlePosition anchorHandle = SizeHandle::oppositePosition(handle_);
-  const QPointF localAnchor = SizeHandle{anchorHandle}.center(bounds);
+  const HandlePosition anchorHandle = ShapeHandle::oppositePosition(handle_);
+  const QPointF localAnchor = ShapeHandle{anchorHandle}.center(bounds);
   const QPointF mappedAnchor = rotationTransform(bounds, initialRotation_).map(localAnchor);
   // Resizing changes the frame center, so compensate to keep the opposite handle fixed.
   bounds.translate(anchorImage_ - mappedAnchor);

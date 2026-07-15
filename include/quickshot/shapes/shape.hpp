@@ -1,6 +1,6 @@
 #pragma once
 
-#include "quickshot/shapes/size_handle.hpp"
+#include "quickshot/shapes/shape_handle.hpp"
 
 #include <QPainterPath>
 #include <QPointF>
@@ -36,14 +36,14 @@ public:
   [[nodiscard]] virtual QRectF boundingRect() const = 0;
   virtual void setBoundingRect(const QRectF& bounds) = 0;
   [[nodiscard]] virtual QPainterPath path() const = 0;
-  [[nodiscard]] virtual std::span<const SizeHandle> handles() const noexcept = 0;
+  [[nodiscard]] virtual std::span<const ShapeHandle> handles() const noexcept = 0;
 
   [[nodiscard]] qreal rotationDegrees() const noexcept;
   void setRotationDegrees(qreal degrees) noexcept;
   [[nodiscard]] QTransform imageTransform() const;
   [[nodiscard]] QPointF mapToImage(const QPointF& point) const;
   [[nodiscard]] QPointF mapFromImage(const QPointF& point) const;
-  [[nodiscard]] QPointF handleCenter(const SizeHandle& handle) const;
+  [[nodiscard]] QPointF handleCenter(const ShapeHandle& handle) const;
   [[nodiscard]] bool contains(const QPointF& point) const;
   void moveBy(const QPointF& offset);
   void transform(const QTransform& transformation);

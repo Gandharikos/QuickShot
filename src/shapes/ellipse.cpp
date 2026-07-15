@@ -25,6 +25,6 @@ QPainterPath Ellipse::path() const {
   return mapPathToImage(shapePath);
 }
 
-std::span<const SizeHandle> Ellipse::handles() const noexcept { return handles_; }
+std::span<const ShapeHandle> Ellipse::handles() const noexcept { return handles_; }
 
 } // namespace quickshot

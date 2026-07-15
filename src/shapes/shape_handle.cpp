@@ -1,8 +1,8 @@
-#include "quickshot/shapes/size_handle.hpp"
+#include "quickshot/shapes/shape_handle.hpp"
 
 namespace quickshot {
 
-HandlePosition SizeHandle::oppositePosition(HandlePosition position) noexcept {
+HandlePosition ShapeHandle::oppositePosition(HandlePosition position) noexcept {
   switch (position) {
   case HandlePosition::TopLeft:
     return HandlePosition::BottomRight;
@@ -25,7 +25,7 @@ HandlePosition SizeHandle::oppositePosition(HandlePosition position) noexcept {
   return position;
 }
 
-QPointF SizeHandle::center(const QRectF& bounds) const {
+QPointF ShapeHandle::center(const QRectF& bounds) const {
   switch (position_) {
   case HandlePosition::TopLeft:
     return bounds.topLeft();
@@ -48,13 +48,13 @@ QPointF SizeHandle::center(const QRectF& bounds) const {
   return {};
 }
 
-QRectF SizeHandle::hitRect(const QRectF& bounds, qreal size) const {
+QRectF ShapeHandle::hitRect(const QRectF& bounds, qreal size) const {
   const QPointF handleCenter = center(bounds);
   const qreal halfSize = size / 2.0;
   return {handleCenter.x() - halfSize, handleCenter.y() - halfSize, size, size};
 }
 
-Qt::CursorShape SizeHandle::cursorShape() const noexcept {
+Qt::CursorShape ShapeHandle::cursorShape() const noexcept {
   switch (position_) {
   case HandlePosition::TopLeft:
   case HandlePosition::BottomRight:

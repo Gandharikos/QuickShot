@@ -420,7 +420,7 @@ std::optional<HandlePosition> QDrawWidget::handleAt(const QPointF& point) const 
     return std::nullopt;
   }
 
-  for (const SizeHandle& handle : selectedShape_->handles()) {
+  for (const ShapeHandle& handle : selectedShape_->handles()) {
     if (handleRect(*selectedShape_, handle.position()).contains(point)) {
       return handle.position();
     }
@@ -430,7 +430,7 @@ std::optional<HandlePosition> QDrawWidget::handleAt(const QPointF& point) const 
 
 QRectF QDrawWidget::handleRect(const ::quickshot::Shape& shape, HandlePosition position) const {
   const qreal imageHandleSize = handleSize / zoomFactor_;
-  const QPointF center = shape.handleCenter(SizeHandle{position});
+  const QPointF center = shape.handleCenter(ShapeHandle{position});
   const qreal halfSize = imageHandleSize / 2.0;
   return {center.x() - halfSize, center.y() - halfSize, imageHandleSize, imageHandleSize};
 }
@@ -446,7 +446,7 @@ QRectF QDrawWidget::constrainedMove(const QRectF& bounds, const QPointF& offset)
 
 void QDrawWidget::updateHoverCursor(const QPointF& point) {
   if (const std::optional<HandlePosition> handle = handleAt(point); handle.has_value()) {
-    viewport()->setCursor(SizeHandle{*handle}.cursorShape());
+    viewport()->setCursor(ShapeHandle{*handle}.cursorShape());
     return;
   }
 
@@ -470,7 +470,7 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
   painter.setBrush(QBrush{Qt::white});
   const std::optional<HandlePosition> activeHandle =
       dragState_ != nullptr ? dragState_->activeHandle() : std::nullopt;
-  for (const SizeHandle& handle : selectedShape_->handles()) {
+  for (const ShapeHandle& handle : selectedShape_->handles()) {
     if (activeHandle.has_value() && handle.position() != *activeHandle) {
       continue;
     }

@@ -1,7 +1,7 @@
 #include "quickshot/roi_exporter.hpp"
 #include "quickshot/shapes/ellipse.hpp"
 #include "quickshot/shapes/rectangle.hpp"
-#include "quickshot/shapes/size_handle.hpp"
+#include "quickshot/shapes/shape_handle.hpp"
 
 #include <QColor>
 #include <QImage>
@@ -109,8 +109,8 @@ void ShapeTest::movesAndTransformsGeometry() {
 
 void ShapeTest::sizeHandleProvidesHitAreaAndCursor() {
   const QRectF bounds{10.0, 20.0, 30.0, 40.0};
-  const quickshot::SizeHandle topHandle{quickshot::HandlePosition::Top};
-  const quickshot::SizeHandle bottomRightHandle{quickshot::HandlePosition::BottomRight};
+  const quickshot::ShapeHandle topHandle{quickshot::HandlePosition::Top};
+  const quickshot::ShapeHandle bottomRightHandle{quickshot::HandlePosition::BottomRight};
 
   QCOMPARE(topHandle.center(bounds), QPointF(25.0, 20.0));
   QCOMPARE(topHandle.hitRect(bounds, 8.0), QRectF(21.0, 16.0, 8.0, 8.0));
@@ -122,14 +122,14 @@ void ShapeTest::sizeHandleProvidesHitAreaAndCursor() {
 void ShapeTest::sizeHandleProvidesOppositePosition() {
   using enum quickshot::HandlePosition;
 
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(TopLeft), BottomRight);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(Top), Bottom);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(TopRight), BottomLeft);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(Right), Left);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(BottomRight), TopLeft);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(Bottom), Top);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(BottomLeft), TopRight);
-  QCOMPARE(quickshot::SizeHandle::oppositePosition(Left), Right);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(TopLeft), BottomRight);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Top), Bottom);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(TopRight), BottomLeft);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Right), Left);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(BottomRight), TopLeft);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Bottom), Top);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(BottomLeft), TopRight);
+  QCOMPARE(quickshot::ShapeHandle::oppositePosition(Left), Right);
 }
 
 void ShapeTest::extractsRectangleRoi() {

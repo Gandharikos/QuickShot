@@ -510,10 +510,10 @@ void MainWindowTest::resizesAndRotatesFromShapeHandles() {
 
   QVERIFY(qAbs(drawWidget.shapeAt(0)->rotationDegrees() - 90.0) < 0.0001);
   const QPointF fixedCorner = drawWidget.shapeAt(0)->handleCenter(
-      quickshot::SizeHandle{quickshot::HandlePosition::BottomRight});
+      quickshot::ShapeHandle{quickshot::HandlePosition::BottomRight});
   drag(drawWidget.viewport(), {100, 30}, {110, 20});
   const QPointF resizedFixedCorner = drawWidget.shapeAt(0)->handleCenter(
-      quickshot::SizeHandle{quickshot::HandlePosition::BottomRight});
+      quickshot::ShapeHandle{quickshot::HandlePosition::BottomRight});
   const qreal fixedCornerMovement = QLineF{fixedCorner, resizedFixedCorner}.length();
   QVERIFY(fixedCornerMovement < 0.0001);
 }

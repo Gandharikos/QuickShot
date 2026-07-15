@@ -18,9 +18,9 @@ enum class HandlePosition : std::uint8_t {
   Left,
 };
 
-class SizeHandle final {
+class ShapeHandle final {
 public:
-  explicit constexpr SizeHandle(HandlePosition position) noexcept : position_(position) {}
+  explicit constexpr ShapeHandle(HandlePosition position) noexcept : position_(position) {}
 
   [[nodiscard]] static HandlePosition oppositePosition(HandlePosition position) noexcept;
   [[nodiscard]] constexpr HandlePosition position() const noexcept { return position_; }

@@ -59,7 +59,7 @@ QPointF Shape::mapFromImage(const QPointF& point) const {
   return imageTransform().inverted().map(point);
 }
 
-QPointF Shape::handleCenter(const SizeHandle& handle) const {
+QPointF Shape::handleCenter(const ShapeHandle& handle) const {
   return mapToImage(handle.center(boundingRect()));
 }
 

@@ -33,7 +33,7 @@ add_library(
   src/shapes/ellipse.cpp
   src/shapes/rectangle.cpp
   src/shapes/shape.cpp
-  src/shapes/size_handle.cpp
+  src/shapes/shape_handle.cpp
   include/quickshot/commands/shape_commands.hpp
   include/quickshot/drag_state.hpp
   include/quickshot/main_window.hpp
@@ -42,7 +42,7 @@ add_library(
   include/quickshot/shapes/ellipse.hpp
   include/quickshot/shapes/rectangle.hpp
   include/quickshot/shapes/shape.hpp
-  include/quickshot/shapes/size_handle.hpp)
+  include/quickshot/shapes/shape_handle.hpp)
 target_include_directories(quickshot_ui PUBLIC include)
 target_link_libraries(quickshot_ui PUBLIC Qt6::Svg Qt6::Widgets)
 target_compile_features(quickshot_ui PUBLIC cxx_std_20)

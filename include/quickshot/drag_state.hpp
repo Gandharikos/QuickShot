@@ -1,6 +1,6 @@
 #pragma once
 
-#include "quickshot/shapes/size_handle.hpp"
+#include "quickshot/shapes/shape_handle.hpp"
 
 #include <QPointF>
 #include <QRectF>

@@ -25,6 +25,6 @@ QPainterPath Rectangle::path() const {
   return mapPathToImage(shapePath);
 }
 
-std::span<const SizeHandle> Rectangle::handles() const noexcept { return handles_; }
+std::span<const ShapeHandle> Rectangle::handles() const noexcept { return handles_; }
 
 } // namespace quickshot
