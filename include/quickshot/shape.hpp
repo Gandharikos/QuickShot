@@ -13,6 +13,8 @@ class QPainter;
 
 namespace quickshot {
 
+enum class ShapeType { Rectangle, Ellipse };
+
 class Shape {
 public:
   Shape() = default;
@@ -23,6 +25,7 @@ public:
   Shape(Shape&&) = delete;
   Shape& operator=(Shape&&) = delete;
 
+  [[nodiscard]] static std::unique_ptr<Shape> make(ShapeType type, const QRectF& bounds);
   [[nodiscard]] virtual std::unique_ptr<Shape> clone() const = 0;
   virtual void draw(QPainter& painter) const = 0;
   [[nodiscard]] virtual QRectF boundingRect() const = 0;

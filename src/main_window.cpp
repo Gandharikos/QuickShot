@@ -1,6 +1,7 @@
 #include "quickshot/main_window.hpp"
 
 #include "quickshot/qdrawwidget.hpp"
+#include "quickshot/shape.hpp"
 
 #include <QAction>
 #include <QActionGroup>
@@ -131,9 +132,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
           &QDrawWidget::setZoomFactor);
   connect(drawWidget_, &QDrawWidget::zoomFactorChanged, zoomFactorSpinBox,
           &QDoubleSpinBox::setValue);
-  connect(rectangleAction, &QAction::triggered, drawWidget_,
-          &QDrawWidget::setRectangleCreationMode);
-  connect(ellipseAction, &QAction::triggered, drawWidget_, &QDrawWidget::setEllipseCreationMode);
+  connect(rectangleAction, &QAction::triggered, this,
+          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Rectangle, enabled); });
+  connect(ellipseAction, &QAction::triggered, this,
+          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Ellipse, enabled); });
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateLeftAction,
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateRightAction,

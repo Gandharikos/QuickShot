@@ -1,10 +1,26 @@
 #include "quickshot/shape.hpp"
 
+#include "quickshot/ellipse.hpp"
+#include "quickshot/rectangle.hpp"
+
 #include <QLineF>
 #include <QtMath>
 #include <cmath>
+#include <memory>
+#include <stdexcept>
 
 namespace quickshot {
+
+std::unique_ptr<Shape> Shape::make(ShapeType type, const QRectF& bounds) {
+  switch (type) {
+  case ShapeType::Rectangle:
+    return std::make_unique<Rectangle>(bounds);
+  case ShapeType::Ellipse:
+    return std::make_unique<Ellipse>(bounds);
+  }
+
+  throw std::invalid_argument{"Unknown ShapeType"};
+}
 
 qreal Shape::rotationDegrees() const noexcept { return rotationDegrees_; }
 

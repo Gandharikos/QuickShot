@@ -1,7 +1,5 @@
 #include "quickshot/qdrawwidget.hpp"
 
-#include "quickshot/ellipse.hpp"
-#include "quickshot/rectangle.hpp"
 #include "quickshot/roi_exporter.hpp"
 #include "quickshot/shape.hpp"
 
@@ -193,12 +191,13 @@ void QDrawWidget::setZoomFactor(qreal factor) {
   emit zoomFactorChanged(zoomFactor_);
 }
 
-void QDrawWidget::setRectangleCreationMode(bool enabled) {
-  setCreationMode(CreationMode::Rectangle, enabled);
-}
-
-void QDrawWidget::setEllipseCreationMode(bool enabled) {
-  setCreationMode(CreationMode::Ellipse, enabled);
+void QDrawWidget::setCreationMode(ShapeType type, bool enabled) {
+  if (enabled) {
+    creationType_ = type;
+  } else if (creationType_ == type) {
+    creationType_.reset();
+    viewport()->setCursor(Qt::ArrowCursor);
+  }
 }
 
 void QDrawWidget::rotateLeft() { rotateImage(-90.0); }
@@ -329,14 +328,10 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
     return;
   }
 
-  if (creationMode_ != CreationMode::None) {
-    std::unique_ptr<::quickshot::Shape> shape;
+  if (creationType_.has_value()) {
     const QRectF initialBounds{point, point};
-    if (creationMode_ == CreationMode::Rectangle) {
-      shape = std::make_unique<Rectangle>(initialBounds);
-    } else {
-      shape = std::make_unique<Ellipse>(initialBounds);
-    }
+    std::unique_ptr<::quickshot::Shape> shape =
+        ::quickshot::Shape::make(*creationType_, initialBounds);
 
     selectedShape_ = shape.get();
     shapes_.push_back(std::move(shape));
@@ -543,8 +538,7 @@ void QDrawWidget::updateHoverCursor(const QPointF& point) {
     return;
   }
 
-  if (shapeAt(point) != nullptr ||
-      (creationMode_ != CreationMode::None && imageBounds().contains(point))) {
+  if (shapeAt(point) != nullptr || (creationType_.has_value() && imageBounds().contains(point))) {
     viewport()->setCursor(Qt::CrossCursor);
     return;
   }
@@ -696,13 +690,6 @@ void QDrawWidget::saveRois(const std::vector<const ::quickshot::Shape*>& targets
               .arg(QDir::toNativeSeparators(outputFileNames[index]), errorMessage));
       return;
     }
-  }
-}
-
-void QDrawWidget::setCreationMode(CreationMode mode, bool enabled) {
-  creationMode_ = enabled ? mode : CreationMode::None;
-  if (!enabled) {
-    viewport()->setCursor(Qt::ArrowCursor);
   }
 }
 

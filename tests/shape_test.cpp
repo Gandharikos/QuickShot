@@ -16,6 +16,7 @@ class ShapeTest final : public QObject {
   Q_OBJECT
 
 private slots:
+  void factoryCreatesConcreteShapes();
   void rectangleProvidesEightHandles();
   void ellipseProvidesEightHandles();
   void clonePreservesConcreteShape();
@@ -27,6 +28,20 @@ private slots:
   void extractsRotatedRoi();
   void savesRoiAsPng();
 };
+
+void ShapeTest::factoryCreatesConcreteShapes() {
+  const QRectF bounds{10.0, 20.0, 30.0, 40.0};
+
+  const std::unique_ptr<quickshot::Shape> rectangle =
+      quickshot::Shape::make(quickshot::ShapeType::Rectangle, bounds);
+  const std::unique_ptr<quickshot::Shape> ellipse =
+      quickshot::Shape::make(quickshot::ShapeType::Ellipse, bounds);
+
+  QVERIFY(dynamic_cast<const quickshot::Rectangle*>(rectangle.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipse.get()) != nullptr);
+  QCOMPARE(rectangle->boundingRect(), bounds);
+  QCOMPARE(ellipse->boundingRect(), bounds);
+}
 
 void ShapeTest::rectangleProvidesEightHandles() {
   const quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 30.0, 40.0}};

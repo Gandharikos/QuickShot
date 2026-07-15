@@ -354,7 +354,7 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   drawWidget.show();
   QCoreApplication::processEvents();
 
-  drawWidget.setRectangleCreationMode(true);
+  drawWidget.setCreationMode(quickshot::ShapeType::Rectangle, true);
   drag(drawWidget.viewport(), {20, 20}, {80, 60});
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
   QCOMPARE(drawWidget.shapeAt(0)->boundingRect(), QRectF(20.0, 20.0, 60.0, 40.0));
@@ -370,8 +370,8 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   drag(drawWidget.viewport(), {50, 50}, {60, 60});
   QCOMPARE(drawWidget.shapeAt(0)->boundingRect(), QRectF(30.0, 30.0, 80.0, 70.0));
 
-  drawWidget.setRectangleCreationMode(false);
-  drawWidget.setEllipseCreationMode(true);
+  drawWidget.setCreationMode(quickshot::ShapeType::Rectangle, false);
+  drawWidget.setCreationMode(quickshot::ShapeType::Ellipse, true);
   drag(drawWidget.viewport(), {120, 20}, {180, 80});
   QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
   QCOMPARE(drawWidget.shapeAt(1)->boundingRect(), QRectF(120.0, 20.0, 60.0, 60.0));
@@ -399,7 +399,7 @@ void MainWindowTest::hidesInactiveHandlesWhileResizing() {
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
   QCoreApplication::processEvents();
-  drawWidget.setEllipseCreationMode(true);
+  drawWidget.setCreationMode(quickshot::ShapeType::Ellipse, true);
   drag(drawWidget.viewport(), {40, 30}, {140, 110});
 
   const QRect imageArea{0, 0, sourceImage.width(), sourceImage.height()};
@@ -434,7 +434,7 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
   QCoreApplication::processEvents();
-  drawWidget.setRectangleCreationMode(true);
+  drawWidget.setCreationMode(quickshot::ShapeType::Rectangle, true);
   drag(drawWidget.viewport(), {40, 30}, {100, 90});
 
   QVERIFY(triggerContextMenuAction(drawWidget, {60, 50}, "cloneShapeAction"));
@@ -465,7 +465,7 @@ void MainWindowTest::resizesAndRotatesFromShapeHandles() {
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
   QCoreApplication::processEvents();
-  drawWidget.setRectangleCreationMode(true);
+  drawWidget.setCreationMode(quickshot::ShapeType::Rectangle, true);
   drag(drawWidget.viewport(), {40, 30}, {100, 90});
 
   QTest::mouseMove(drawWidget.viewport(), {100, 60});
@@ -513,7 +513,7 @@ void MainWindowTest::createsShapesInImageCoordinates() {
   drawWidget.horizontalScrollBar()->setValue(22);
   drawWidget.verticalScrollBar()->setValue(11);
 
-  drawWidget.setRectangleCreationMode(true);
+  drawWidget.setCreationMode(quickshot::ShapeType::Rectangle, true);
   drag(drawWidget.viewport(), {11, 11}, {33, 33});
 
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});

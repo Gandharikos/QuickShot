@@ -21,6 +21,7 @@ class QWheelEvent;
 namespace quickshot {
 
 enum class HandlePosition;
+enum class ShapeType;
 class Shape;
 
 class QDrawWidget final : public QAbstractScrollArea {
@@ -37,8 +38,7 @@ public:
   [[nodiscard]] qsizetype shapeCount() const noexcept;
   [[nodiscard]] const ::quickshot::Shape* shapeAt(qsizetype index) const;
   void setZoomFactor(qreal factor);
-  void setRectangleCreationMode(bool enabled);
-  void setEllipseCreationMode(bool enabled);
+  void setCreationMode(ShapeType type, bool enabled);
   void rotateLeft();
   void rotateRight();
 
@@ -56,7 +56,6 @@ protected:
   void wheelEvent(QWheelEvent* event) override;
 
 private:
-  enum class CreationMode { None, Rectangle, Ellipse };
   enum class DragMode { None, Create, Move, Resize, Rotate };
 
   [[nodiscard]] QPointF imagePosition(const QPointF& viewportPosition) const;
@@ -74,7 +73,6 @@ private:
   void deleteShape(const ::quickshot::Shape& shape);
   void deleteAllShapes();
   void saveRois(const std::vector<const ::quickshot::Shape*>& targets);
-  void setCreationMode(CreationMode mode, bool enabled);
   void rotateImage(qreal degrees);
   [[nodiscard]] QSize scaledImageSize() const;
   void updateScrollBars();
@@ -82,7 +80,7 @@ private:
   QImage image_;
   std::vector<std::unique_ptr<::quickshot::Shape>> shapes_;
   ::quickshot::Shape* selectedShape_ = nullptr;
-  CreationMode creationMode_ = CreationMode::None;
+  std::optional<ShapeType> creationType_;
   DragMode dragMode_ = DragMode::None;
   std::optional<HandlePosition> activeHandle_;
   QPointF dragStart_;
