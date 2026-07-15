@@ -430,9 +430,9 @@ QRectF QDrawWidget::imageBounds() const {
 }
 
 ::quickshot::Shape* QDrawWidget::shapeAt(const QPointF& point) const {
-  for (auto shape = shapes_.rbegin(); shape != shapes_.rend(); ++shape) {
-    if ((*shape)->contains(point)) {
-      return shape->get();
+  for (const auto& shape : std::views::reverse(shapes_)) {
+    if (shape->contains(point)) {
+      return shape.get();
     }
   }
   return nullptr;
