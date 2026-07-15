@@ -19,6 +19,8 @@ enum class DragResult : std::uint8_t {
   RemoveShape,
 };
 
+enum class DragProgress : std::uint8_t { Ignore, Continue, Finish };
+
 struct DragStart {
   Shape& shape;
   QPointF origin;
@@ -60,6 +62,10 @@ public:
 
   virtual void enter(DragContext& context) const;
   virtual void update(DragContext& context, const QPointF& point) const = 0;
+  [[nodiscard]] virtual DragProgress press(DragContext& context, Qt::MouseButton button,
+                                           const QPointF& point) const;
+  [[nodiscard]] virtual DragProgress release(DragContext& context, Qt::MouseButton button,
+                                             const QPointF& point) const;
   [[nodiscard]] virtual DragResult finish(const DragContext& context) const noexcept;
   [[nodiscard]] virtual std::optional<ShapeHandle>
   activeHandle(const DragContext& context) const noexcept;
@@ -94,6 +100,21 @@ public:
 
 private:
   MoveState() = default;
+};
+
+class PolygonCreateState final : public DragState {
+public:
+  [[nodiscard]] static const PolygonCreateState& instance() noexcept;
+
+  void update(DragContext& context, const QPointF& point) const override;
+  [[nodiscard]] DragProgress press(DragContext& context, Qt::MouseButton button,
+                                   const QPointF& point) const override;
+  [[nodiscard]] DragResult finish(const DragContext& context) const noexcept override;
+  [[nodiscard]] bool createsShape() const noexcept override;
+  [[nodiscard]] Qt::MouseButton completionButton() const noexcept override;
+
+private:
+  PolygonCreateState() = default;
 };
 
 class ResizeState final : public DragState {
@@ -136,6 +157,8 @@ public:
 
   void begin(const DragState& state, const DragStart& start);
   void update(const QPointF& point);
+  [[nodiscard]] DragProgress press(Qt::MouseButton button, const QPointF& point);
+  [[nodiscard]] DragProgress release(Qt::MouseButton button, const QPointF& point);
   [[nodiscard]] std::optional<DragCompletion> finish();
   [[nodiscard]] std::optional<DragCompletion> cancel();
   [[nodiscard]] bool isActive() const noexcept;

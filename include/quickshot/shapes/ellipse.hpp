@@ -4,7 +4,7 @@
 
 namespace quickshot {
 
-class Ellipse final : public RectangularShape {
+class Ellipse : public RectangularShape {
 public:
   explicit Ellipse(const QRectF& bounds);
 

@@ -1,5 +1,7 @@
 #include "quickshot/main_window.hpp"
 #include "quickshot/qdrawwidget.hpp"
+#include "quickshot/shapes/circle.hpp"
+#include "quickshot/shapes/polygon.hpp"
 #include "quickshot/shapes/shape.hpp"
 
 #include <QAction>
@@ -131,6 +133,7 @@ private slots:
   void enablesAndRunsRotationActions();
   void undoesAndRedoesDragOperations();
   void createsMovesAndResizesShapes();
+  void createsCirclesAndPolygons();
   void hidesInactiveHandlesWhileResizing();
   void contextMenusCloneAndDeleteShapes();
   void resizesAndRotatesFromShapeHandles();
@@ -164,6 +167,8 @@ void MainWindowTest::providesImageControls() {
   const auto* redoAction = window.findChild<QAction*>("redoAction");
   const auto* rectangleAction = window.findChild<QAction*>("rectangleAction");
   const auto* ellipseAction = window.findChild<QAction*>("ellipseAction");
+  const auto* circleAction = window.findChild<QAction*>("circleAction");
+  const auto* polygonAction = window.findChild<QAction*>("polygonAction");
   const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
 
   QVERIFY(openButton != nullptr);
@@ -178,6 +183,8 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(redoAction != nullptr);
   QVERIFY(rectangleAction != nullptr);
   QVERIFY(ellipseAction != nullptr);
+  QVERIFY(circleAction != nullptr);
+  QVERIFY(polygonAction != nullptr);
   QVERIFY(zoomFactorSpinBox != nullptr);
   QCOMPARE(rotateLeftAction->text(), QStringLiteral("Rotate Left"));
   QCOMPARE(rotateRightAction->text(), QStringLiteral("Rotate Right"));
@@ -193,17 +200,23 @@ void MainWindowTest::providesImageControls() {
   QCOMPARE(redoAction->shortcut(), QKeySequence{QKeySequence::Redo});
   QVERIFY(rectangleAction->isCheckable());
   QVERIFY(ellipseAction->isCheckable());
+  QVERIFY(circleAction->isCheckable());
+  QVERIFY(polygonAction->isCheckable());
   QVERIFY(!rectangleAction->icon().isNull());
   QVERIFY(!ellipseAction->icon().isNull());
+  QVERIFY(!circleAction->icon().isNull());
+  QVERIFY(!polygonAction->icon().isNull());
   QVERIFY(!rectangleAction->isEnabled());
   QVERIFY(!ellipseAction->isEnabled());
+  QVERIFY(!circleAction->isEnabled());
+  QVERIFY(!polygonAction->isEnabled());
   QVERIFY(!zoomFactorSpinBox->isEnabled());
   QCOMPARE(zoomFactorSpinBox->value(), 1.0);
   QCOMPARE(zoomFactorSpinBox->minimum(), 0.1);
   QCOMPARE(zoomFactorSpinBox->maximum(), 8.0);
 
   const QList<QAction*> toolbarActions = toolbar->actions();
-  QCOMPARE(toolbarActions.size(), qsizetype{11});
+  QCOMPARE(toolbarActions.size(), qsizetype{13});
   QVERIFY(toolbarActions.at(1)->isSeparator());
   QCOMPARE(toolbarActions.at(2), undoAction);
   QCOMPARE(toolbarActions.at(3), redoAction);
@@ -214,6 +227,8 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(toolbarActions.at(8)->isSeparator());
   QCOMPARE(toolbarActions.at(9), rectangleAction);
   QCOMPARE(toolbarActions.at(10), ellipseAction);
+  QCOMPARE(toolbarActions.at(11), circleAction);
+  QCOMPARE(toolbarActions.at(12), polygonAction);
 }
 
 void MainWindowTest::remembersLastOpenDirectory() {
@@ -333,11 +348,15 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
   auto* rectangleAction = window.findChild<QAction*>("rectangleAction");
   auto* ellipseAction = window.findChild<QAction*>("ellipseAction");
+  auto* circleAction = window.findChild<QAction*>("circleAction");
+  auto* polygonAction = window.findChild<QAction*>("polygonAction");
   QVERIFY(drawWidget != nullptr);
   QVERIFY(rotateLeftAction != nullptr);
   QVERIFY(rotateRightAction != nullptr);
   QVERIFY(rectangleAction != nullptr);
   QVERIFY(ellipseAction != nullptr);
+  QVERIFY(circleAction != nullptr);
+  QVERIFY(polygonAction != nullptr);
 
   window.resize(180, 180);
   window.show();
@@ -348,6 +367,8 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QVERIFY(rotateRightAction->isEnabled());
   QVERIFY(rectangleAction->isEnabled());
   QVERIFY(ellipseAction->isEnabled());
+  QVERIFY(circleAction->isEnabled());
+  QVERIFY(polygonAction->isEnabled());
   QVERIFY(drawWidget->horizontalScrollBar()->maximum() > 0);
   QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
 
@@ -479,6 +500,63 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   drawWidget.rotateRight();
   QCOMPARE(drawWidget.shapeAt(0)->path().boundingRect().size(), QSizeF(70.0, 80.0));
   QCOMPARE(drawWidget.shapeAt(0)->rotationDegrees(), 90.0);
+}
+
+void MainWindowTest::createsCirclesAndPolygons() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({200, 150}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("circle-polygon.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(220, 180);
+  QVERIFY(drawWidget.loadImage(imagePath));
+  drawWidget.show();
+  QCoreApplication::processEvents();
+
+  drawWidget.setCreationMode(quickshot::ShapeType::Circle, true);
+  drag(drawWidget.viewport(), {20, 20}, {70, 50});
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  const auto* circle = dynamic_cast<const quickshot::Circle*>(drawWidget.shapeAt(0));
+  QVERIFY(circle != nullptr);
+  QCOMPARE(circle->boundingRect(), QRectF(20.0, 20.0, 50.0, 50.0));
+
+  drawWidget.setCreationMode(quickshot::ShapeType::Polygon, true);
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {100, 20});
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {170, 20});
+  QTest::mouseClick(drawWidget.viewport(), Qt::LeftButton, Qt::NoModifier, {130, 90});
+  QTest::mouseMove(drawWidget.viewport(), {180, 110});
+  QCoreApplication::processEvents();
+
+  const QColor creationHandleColor{0, 200, 83};
+  const QImage draft = renderViewport(drawWidget);
+  QVERIFY(hasColorNear(draft, {100, 20}, creationHandleColor));
+  QVERIFY(hasColorNear(draft, {170, 20}, creationHandleColor));
+  QVERIFY(hasColorNear(draft, {130, 90}, creationHandleColor));
+
+  // Right-clicking elsewhere completes the polygon without adding that position as a vertex.
+  QTest::mouseClick(drawWidget.viewport(), Qt::RightButton, Qt::NoModifier, {190, 130});
+  QCoreApplication::processEvents();
+
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+  const auto* polygon = dynamic_cast<const quickshot::Polygon*>(drawWidget.shapeAt(1));
+  QVERIFY(polygon != nullptr);
+  QVERIFY(polygon->isCreationComplete());
+  QCOMPARE(polygon->pointCount(), std::size_t{3});
+  QCOMPARE(polygon->handles().size(), std::size_t{3});
+  QCOMPARE(polygon->handleCenter(polygon->handles().back()), QPointF(130.0, 90.0));
+
+  const QImage completed = renderViewport(drawWidget);
+  QVERIFY(hasColorNear(completed, {100, 20}, Qt::white));
+  QVERIFY(!hasColorNear(completed, {100, 20}, creationHandleColor));
+  QCOMPARE(drawWidget.undoStack().count(), 2);
+  drawWidget.undoStack().undo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  drawWidget.undoStack().redo();
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
 }
 
 void MainWindowTest::hidesInactiveHandlesWhileResizing() {

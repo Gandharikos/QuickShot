@@ -1,10 +1,13 @@
 #include "quickshot/shapes/shape.hpp"
 
+#include "quickshot/shapes/circle.hpp"
 #include "quickshot/shapes/ellipse.hpp"
+#include "quickshot/shapes/polygon.hpp"
 #include "quickshot/shapes/rectangle.hpp"
 
 #include <QLineF>
 #include <QtMath>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -21,6 +24,14 @@ const std::unordered_map<ShapeType, Shape::Factory>& Shape::factories() {
        [](const QRectF& bounds) -> std::unique_ptr<Shape> {
          return std::make_unique<Ellipse>(bounds);
        }},
+      {ShapeType::Circle,
+       [](const QRectF& bounds) -> std::unique_ptr<Shape> {
+         return std::make_unique<Circle>(bounds);
+       }},
+      {ShapeType::Polygon,
+       [](const QRectF& bounds) -> std::unique_ptr<Shape> {
+         return std::make_unique<Polygon>(bounds);
+       }},
   };
   return registeredFactories;
 }
@@ -34,6 +45,17 @@ std::unique_ptr<Shape> Shape::make(ShapeType type, const QRectF& bounds) {
 
   return factory->second(bounds);
 }
+
+void Shape::updateCreation(const QPointF& origin, const QPointF& imagePoint,
+                           const QRectF& imageBounds) {
+  const QPointF boundedPoint{std::clamp(imagePoint.x(), imageBounds.left(), imageBounds.right()),
+                             std::clamp(imagePoint.y(), imageBounds.top(), imageBounds.bottom())};
+  setBoundingRect(QRectF{origin, boundedPoint}.normalized());
+}
+
+CreationKind Shape::creationKind() const noexcept { return CreationKind::Drag; }
+
+bool Shape::isCreationComplete() const noexcept { return true; }
 
 qreal Shape::rotationDegrees() const noexcept { return rotationDegrees_; }
 

@@ -19,6 +19,7 @@ public:
 
 protected:
   explicit RectangularShape(const QRectF& bounds);
+  [[nodiscard]] virtual bool hasFixedAspectRatio() const noexcept;
 
 private:
   class Geometry final : public ShapeGeometry {

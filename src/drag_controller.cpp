@@ -1,5 +1,7 @@
 #include "quickshot/drag_controller.hpp"
 
+#include "quickshot/shapes/polygon.hpp"
+
 #include <QCoreApplication>
 #include <QtGlobal>
 #include <QtMath>
@@ -38,6 +40,23 @@ const ShapeHandle& targetHandle(const DragContext& context) {
   return *context.handle;
 }
 
+Polygon& targetPolygon(DragContext& context) {
+  auto* polygon = dynamic_cast<Polygon*>(context.shape);
+  Q_ASSERT(polygon != nullptr);
+  return *polygon;
+}
+
+const Polygon& targetPolygon(const DragContext& context) {
+  const auto* polygon = dynamic_cast<const Polygon*>(context.shape);
+  Q_ASSERT(polygon != nullptr);
+  return *polygon;
+}
+
+QPointF boundedPoint(const QPointF& point, const QRectF& bounds) {
+  return {std::clamp(point.x(), bounds.left(), bounds.right()),
+          std::clamp(point.y(), bounds.top(), bounds.bottom())};
+}
+
 void restoreInitialGeometry(DragContext& context) {
   Q_ASSERT(context.initialGeometry != nullptr);
   if (context.initialGeometry != nullptr) {
@@ -48,6 +67,21 @@ void restoreInitialGeometry(DragContext& context) {
 } // namespace
 
 void DragState::enter(DragContext& context) const { Q_UNUSED(context); }
+
+DragProgress DragState::press(DragContext& context, Qt::MouseButton button,
+                              const QPointF& point) const {
+  Q_UNUSED(context);
+  Q_UNUSED(button);
+  Q_UNUSED(point);
+  return DragProgress::Ignore;
+}
+
+DragProgress DragState::release(DragContext& context, Qt::MouseButton button,
+                                const QPointF& point) const {
+  Q_UNUSED(context);
+  Q_UNUSED(point);
+  return button == completionButton() ? DragProgress::Finish : DragProgress::Ignore;
+}
 
 DragResult DragState::finish(const DragContext& context) const noexcept {
   Q_UNUSED(context);
@@ -69,10 +103,7 @@ const CreateState& CreateState::instance() noexcept {
 }
 
 void CreateState::update(DragContext& context, const QPointF& point) const {
-  const QPointF boundedPoint{
-      std::clamp(point.x(), context.imageBounds.left(), context.imageBounds.right()),
-      std::clamp(point.y(), context.imageBounds.top(), context.imageBounds.bottom())};
-  targetShape(context).setBoundingRect(QRectF{context.origin, boundedPoint}.normalized());
+  targetShape(context).updateCreation(context.origin, point, context.imageBounds);
 }
 
 DragResult CreateState::finish(const DragContext& context) const noexcept {
@@ -85,6 +116,42 @@ DragResult CreateState::finish(const DragContext& context) const noexcept {
 bool CreateState::createsShape() const noexcept { return true; }
 
 Qt::MouseButton CreateState::completionButton() const noexcept { return Qt::LeftButton; }
+
+const PolygonCreateState& PolygonCreateState::instance() noexcept {
+  static const PolygonCreateState state;
+  return state;
+}
+
+void PolygonCreateState::update(DragContext& context, const QPointF& point) const {
+  targetPolygon(context).setPreviewPoint(boundedPoint(point, context.imageBounds));
+}
+
+DragProgress PolygonCreateState::press(DragContext& context, Qt::MouseButton button,
+                                       const QPointF& point) const {
+  if (button == Qt::LeftButton) {
+    if (!context.imageBounds.contains(point)) {
+      return DragProgress::Ignore;
+    }
+    targetPolygon(context).appendPoint(point);
+    return DragProgress::Continue;
+  }
+  if (button == Qt::RightButton) {
+    // The right-click position is deliberately not a vertex; it only commits
+    // the points previously added with the left button.
+    targetPolygon(context).finishCreation();
+    return DragProgress::Finish;
+  }
+  return DragProgress::Ignore;
+}
+
+DragResult PolygonCreateState::finish(const DragContext& context) const noexcept {
+  return targetPolygon(context).isCreationComplete() ? DragResult::KeepShape
+                                                     : DragResult::RemoveShape;
+}
+
+bool PolygonCreateState::createsShape() const noexcept { return true; }
+
+Qt::MouseButton PolygonCreateState::completionButton() const noexcept { return Qt::RightButton; }
 
 const MoveState& MoveState::instance() noexcept {
   static const MoveState state;
@@ -179,6 +246,14 @@ void DragController::update(const QPointF& point) {
   if (state_ != nullptr) {
     state_->update(context_, point);
   }
+}
+
+DragProgress DragController::press(Qt::MouseButton button, const QPointF& point) {
+  return state_ != nullptr ? state_->press(context_, button, point) : DragProgress::Ignore;
+}
+
+DragProgress DragController::release(Qt::MouseButton button, const QPointF& point) {
+  return state_ != nullptr ? state_->release(context_, button, point) : DragProgress::Ignore;
 }
 
 std::optional<DragCompletion> DragController::finish() {

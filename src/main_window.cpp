@@ -132,14 +132,30 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
       toolbar->addAction(QIcon::fromTheme(QStringLiteral("draw-ellipse"),
                                           svgIcon(QStringLiteral(":/quickshot/icons/ellipse.svg"))),
                          tr("Ellipse"));
+  auto* circleAction =
+      toolbar->addAction(QIcon::fromTheme(QStringLiteral("draw-circle"),
+                                          svgIcon(QStringLiteral(":/quickshot/icons/circle.svg"))),
+                         tr("Circle"));
+  auto* polygonAction =
+      toolbar->addAction(QIcon::fromTheme(QStringLiteral("draw-polygon"),
+                                          svgIcon(QStringLiteral(":/quickshot/icons/polygon.svg"))),
+                         tr("Polygon"));
   rectangleAction->setObjectName("rectangleAction");
   ellipseAction->setObjectName("ellipseAction");
+  circleAction->setObjectName("circleAction");
+  polygonAction->setObjectName("polygonAction");
   rectangleAction->setCheckable(true);
   ellipseAction->setCheckable(true);
+  circleAction->setCheckable(true);
+  polygonAction->setCheckable(true);
   rectangleAction->setEnabled(false);
   ellipseAction->setEnabled(false);
+  circleAction->setEnabled(false);
+  polygonAction->setEnabled(false);
   shapeActions->addAction(rectangleAction);
   shapeActions->addAction(ellipseAction);
+  shapeActions->addAction(circleAction);
+  shapeActions->addAction(polygonAction);
 
   connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
   connect(rotateLeftAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateLeft);
@@ -152,6 +168,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
           [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Rectangle, enabled); });
   connect(ellipseAction, &QAction::triggered, this,
           [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Ellipse, enabled); });
+  connect(circleAction, &QAction::triggered, this,
+          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Circle, enabled); });
+  connect(polygonAction, &QAction::triggered, this,
+          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Polygon, enabled); });
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateLeftAction,
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateRightAction,
@@ -161,6 +181,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rectangleAction,
           &QAction::setEnabled);
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, ellipseAction, &QAction::setEnabled);
+  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, circleAction, &QAction::setEnabled);
+  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, polygonAction, &QAction::setEnabled);
 
   setCentralWidget(drawWidget_);
 }

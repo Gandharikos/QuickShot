@@ -78,6 +78,16 @@ QString numberedPngFileName(const QString& baseFileName, std::size_t index) {
   return baseFile.dir().filePath(numberedName);
 }
 
+const DragState& creationState(const Shape& shape) {
+  switch (shape.creationKind()) {
+  case CreationKind::Drag:
+    return CreateState::instance();
+  case CreationKind::MultiPoint:
+    return PolygonCreateState::instance();
+  }
+  return CreateState::instance();
+}
+
 } // namespace
 
 QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent), undoStack_(this) {
@@ -162,8 +172,12 @@ void QDrawWidget::setZoomFactor(qreal factor) {
 
 void QDrawWidget::setCreationMode(ShapeType type, bool enabled) {
   if (enabled) {
+    if (creationType_ != type) {
+      cancelDrag();
+    }
     creationType_ = type;
   } else if (creationType_ == type) {
+    cancelDrag();
     creationType_.reset();
     viewport()->setCursor(Qt::ArrowCursor);
   }
@@ -272,6 +286,27 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
   }
 
   const QPointF point = imagePosition(event->position());
+  if (dragController_.isActive()) {
+    const DragProgress progress = dragController_.press(event->button(), point);
+    if (progress == DragProgress::Finish) {
+      if (event->button() == Qt::RightButton) {
+        suppressContextMenu_ = true;
+      }
+      std::optional<DragCompletion> completion = dragController_.finish();
+      if (completion.has_value()) {
+        completeDrag(std::move(*completion));
+      }
+    }
+    if (progress != DragProgress::Ignore) {
+      viewport()->update();
+      event->accept();
+      return;
+    }
+
+    QAbstractScrollArea::mousePressEvent(event);
+    return;
+  }
+
   if (event->button() == Qt::RightButton) {
     if (const std::optional<ShapeHandle> handle = handleAt(point); handle.has_value()) {
       dragController_.begin(RotateState::instance(), {.shape = *selectedShape_,
@@ -333,11 +368,11 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 
     selectedShape_ = shape.get();
     shapes_.push_back(std::move(shape));
-    dragController_.begin(CreateState::instance(), {.shape = *selectedShape_,
-                                                    .origin = point,
-                                                    .imageBounds = imageBounds(),
-                                                    .handle = std::nullopt,
-                                                    .previousSelection = previousSelection});
+    dragController_.begin(creationState(*selectedShape_), {.shape = *selectedShape_,
+                                                           .origin = point,
+                                                           .imageBounds = imageBounds(),
+                                                           .handle = std::nullopt,
+                                                           .previousSelection = previousSelection});
     viewport()->update();
     event->accept();
     return;
@@ -349,14 +384,21 @@ void QDrawWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void QDrawWidget::mouseReleaseEvent(QMouseEvent* event) {
-  if (!dragController_.isActive() || event->button() != dragController_.completionButton()) {
+  if (!dragController_.isActive()) {
     QAbstractScrollArea::mouseReleaseEvent(event);
     return;
   }
 
-  std::optional<DragCompletion> completion = dragController_.finish();
-  if (completion.has_value()) {
-    completeDrag(std::move(*completion));
+  const DragProgress progress =
+      dragController_.release(event->button(), imagePosition(event->position()));
+  if (progress == DragProgress::Finish) {
+    std::optional<DragCompletion> completion = dragController_.finish();
+    if (completion.has_value()) {
+      completeDrag(std::move(*completion));
+    }
+  } else if (progress == DragProgress::Ignore) {
+    QAbstractScrollArea::mouseReleaseEvent(event);
+    return;
   }
 
   updateHoverCursor(imagePosition(event->position()));
@@ -504,11 +546,13 @@ void QDrawWidget::drawSelectionHandles(QPainter& painter) const {
     return;
   }
 
-  QPen handlePen{Qt::white};
+  const QColor handleColor =
+      selectedShape_->isCreationComplete() ? QColor{Qt::white} : QColor{0, 200, 83};
+  QPen handlePen{handleColor};
   handlePen.setCosmetic(true);
   painter.save();
   painter.setPen(handlePen);
-  painter.setBrush(QBrush{Qt::white});
+  painter.setBrush(QBrush{handleColor});
   const std::optional<ShapeHandle> activeHandle = dragController_.activeHandle();
   for (const ShapeHandle& handle : selectedShape_->handles()) {
     if (activeHandle.has_value() && handle != *activeHandle) {

@@ -108,6 +108,62 @@ QRectF resizedBounds(const QRectF& bounds, HandlePosition handle, const QPointF&
   return {QPointF{left, top}, QPointF{right, bottom}};
 }
 
+qreal boundedLength(qreal requested, qreal maximum) {
+  return std::min(std::max(requested, minimumShapeSize), maximum);
+}
+
+QRectF resizedSquareBounds(const QRectF& bounds, HandlePosition handle, const QPointF& point,
+                           const QRectF& limits) {
+  const QPointF anchor = rectangularHandleCenter(bounds, oppositePosition(handle));
+  const QPointF center = bounds.center();
+
+  switch (handle) {
+  case HandlePosition::TopLeft:
+  case HandlePosition::TopRight:
+  case HandlePosition::BottomRight:
+  case HandlePosition::BottomLeft: {
+    const qreal horizontalDirection =
+        handle == HandlePosition::TopLeft || handle == HandlePosition::BottomLeft ? -1.0 : 1.0;
+    const qreal verticalDirection =
+        handle == HandlePosition::TopLeft || handle == HandlePosition::TopRight ? -1.0 : 1.0;
+    const qreal horizontalMaximum =
+        horizontalDirection < 0.0 ? anchor.x() - limits.left() : limits.right() - anchor.x();
+    const qreal verticalMaximum =
+        verticalDirection < 0.0 ? anchor.y() - limits.top() : limits.bottom() - anchor.y();
+    const qreal requested =
+        std::max(std::abs(point.x() - anchor.x()), std::abs(point.y() - anchor.y()));
+    const qreal side = boundedLength(requested, std::min(horizontalMaximum, verticalMaximum));
+    return QRectF{anchor, anchor + QPointF{horizontalDirection * side, verticalDirection * side}}
+        .normalized();
+  }
+  case HandlePosition::Left:
+  case HandlePosition::Right: {
+    const qreal direction = handle == HandlePosition::Left ? -1.0 : 1.0;
+    const qreal horizontalMaximum =
+        direction < 0.0 ? anchor.x() - limits.left() : limits.right() - anchor.x();
+    const qreal verticalMaximum =
+        2.0 * std::min(center.y() - limits.top(), limits.bottom() - center.y());
+    const qreal side = boundedLength(std::abs(point.x() - anchor.x()),
+                                     std::min(horizontalMaximum, verticalMaximum));
+    const qreal left = direction < 0.0 ? anchor.x() - side : anchor.x();
+    return {left, center.y() - side / 2.0, side, side};
+  }
+  case HandlePosition::Top:
+  case HandlePosition::Bottom: {
+    const qreal direction = handle == HandlePosition::Top ? -1.0 : 1.0;
+    const qreal verticalMaximum =
+        direction < 0.0 ? anchor.y() - limits.top() : limits.bottom() - anchor.y();
+    const qreal horizontalMaximum =
+        2.0 * std::min(center.x() - limits.left(), limits.right() - center.x());
+    const qreal side = boundedLength(std::abs(point.y() - anchor.y()),
+                                     std::min(horizontalMaximum, verticalMaximum));
+    const qreal top = direction < 0.0 ? anchor.y() - side : anchor.y();
+    return {center.x() - side / 2.0, top, side, side};
+  }
+  }
+  return bounds;
+}
+
 } // namespace
 
 RectangularShape::Geometry::Geometry(const QRectF& bounds, qreal rotationDegrees)
@@ -124,6 +180,8 @@ RectangularShape::RectangularShape(const QRectF& bounds) : bounds_(bounds.normal
 QRectF RectangularShape::boundingRect() const { return bounds_; }
 
 void RectangularShape::setBoundingRect(const QRectF& bounds) { bounds_ = bounds.normalized(); }
+
+bool RectangularShape::hasFixedAspectRatio() const noexcept { return false; }
 
 std::span<const ShapeHandle> RectangularShape::handles() const noexcept { return handles_; }
 
@@ -158,7 +216,9 @@ void RectangularShape::resize(const ShapeGeometry& initialGeometry, const ShapeH
   const QTransform initialTransform =
       rotationTransform(geometry->bounds, geometry->rotationDegrees);
   const QPointF localPoint = initialTransform.inverted().map(imagePoint);
-  QRectF bounds = resizedBounds(geometry->bounds, position, localPoint, imageBounds);
+  QRectF bounds = hasFixedAspectRatio()
+                      ? resizedSquareBounds(geometry->bounds, position, localPoint, imageBounds)
+                      : resizedBounds(geometry->bounds, position, localPoint, imageBounds);
   const QPointF anchorImage =
       initialTransform.map(rectangularHandleCenter(geometry->bounds, oppositePosition(position)));
   const QPointF localAnchor = rectangularHandleCenter(bounds, oppositePosition(position));

@@ -1,4 +1,5 @@
 #include "quickshot/drag_controller.hpp"
+#include "quickshot/shapes/polygon.hpp"
 #include "quickshot/shapes/rectangle.hpp"
 
 #include <QPointF>
@@ -42,6 +43,7 @@ class DragControllerTest final : public QObject {
 private slots:
   void statesAreSingletons();
   void createStateClampsAndValidatesBounds();
+  void polygonStateCommitsOnlyLeftClickVertices();
   void cancelRestoresTheInitialGeometry();
   void moveStateConstrainsShapeToImage();
   void resizeStateUpdatesTheActiveHandle();
@@ -50,9 +52,46 @@ private slots:
 
 void DragControllerTest::statesAreSingletons() {
   QCOMPARE(&quickshot::CreateState::instance(), &quickshot::CreateState::instance());
+  QCOMPARE(&quickshot::PolygonCreateState::instance(), &quickshot::PolygonCreateState::instance());
   QCOMPARE(&quickshot::MoveState::instance(), &quickshot::MoveState::instance());
   QCOMPARE(&quickshot::ResizeState::instance(), &quickshot::ResizeState::instance());
   QCOMPARE(&quickshot::RotateState::instance(), &quickshot::RotateState::instance());
+}
+
+void DragControllerTest::polygonStateCommitsOnlyLeftClickVertices() {
+  quickshot::Polygon polygon{QRectF{10.0, 10.0, 0.0, 0.0}};
+  quickshot::DragController controller;
+  controller.begin(quickshot::PolygonCreateState::instance(),
+                   {.shape = polygon,
+                    .origin = {10.0, 10.0},
+                    .imageBounds = {0.0, 0.0, 100.0, 100.0},
+                    .handle = std::nullopt});
+
+  QCOMPARE(controller.release(Qt::LeftButton, {10.0, 10.0}), quickshot::DragProgress::Ignore);
+  QCOMPARE(controller.press(Qt::LeftButton, {80.0, 10.0}), quickshot::DragProgress::Continue);
+  QCOMPARE(controller.press(Qt::LeftButton, {40.0, 70.0}), quickshot::DragProgress::Continue);
+  controller.update({60.0, 90.0});
+  QCOMPARE(controller.press(Qt::RightButton, {95.0, 95.0}), quickshot::DragProgress::Finish);
+
+  QCOMPARE(polygon.pointCount(), std::size_t{3});
+  QCOMPARE(polygon.handles().size(), std::size_t{3});
+  QCOMPARE(polygon.handleCenter(polygon.handles().back()), QPointF(40.0, 70.0));
+  QVERIFY(polygon.isCreationComplete());
+
+  const quickshot::DragCompletion completion = requireCompletion(controller.finish());
+  QCOMPARE(completion.result, quickshot::DragResult::KeepShape);
+  QVERIFY(completion.createsShape);
+
+  quickshot::Polygon collinearPolygon{QRectF{10.0, 10.0, 0.0, 0.0}};
+  controller.begin(quickshot::PolygonCreateState::instance(),
+                   {.shape = collinearPolygon,
+                    .origin = {10.0, 10.0},
+                    .imageBounds = {0.0, 0.0, 100.0, 100.0},
+                    .handle = std::nullopt});
+  QCOMPARE(controller.press(Qt::LeftButton, {20.0, 20.0}), quickshot::DragProgress::Continue);
+  QCOMPARE(controller.press(Qt::LeftButton, {30.0, 30.0}), quickshot::DragProgress::Continue);
+  QCOMPARE(controller.press(Qt::RightButton, {90.0, 90.0}), quickshot::DragProgress::Finish);
+  QCOMPARE(requireCompletion(controller.finish()).result, quickshot::DragResult::RemoveShape);
 }
 
 void DragControllerTest::createStateClampsAndValidatesBounds() {

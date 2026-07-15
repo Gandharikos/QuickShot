@@ -30,7 +30,9 @@ add_library(
   src/main_window.cpp
   src/qdrawwidget.cpp
   src/roi_exporter.cpp
+  src/shapes/circle.cpp
   src/shapes/ellipse.cpp
+  src/shapes/polygon.cpp
   src/shapes/rectangle.cpp
   src/shapes/rectangular_shape.cpp
   src/shapes/shape.cpp
@@ -39,7 +41,9 @@ add_library(
   include/quickshot/main_window.hpp
   include/quickshot/qdrawwidget.hpp
   include/quickshot/roi_exporter.hpp
+  include/quickshot/shapes/circle.hpp
   include/quickshot/shapes/ellipse.hpp
+  include/quickshot/shapes/polygon.hpp
   include/quickshot/shapes/rectangle.hpp
   include/quickshot/shapes/rectangular_shape.hpp
   include/quickshot/shapes/shape.hpp
@@ -56,7 +60,9 @@ qt_add_resources(
   BASE
   "assets/icons"
   FILES
+  assets/icons/circle.svg
   assets/icons/ellipse.svg
+  assets/icons/polygon.svg
   assets/icons/rectangle.svg
   assets/icons/rotate-cursor.svg
   assets/icons/rotate-left.svg

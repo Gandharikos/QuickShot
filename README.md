@@ -32,13 +32,15 @@ corner, or edit the toolbar factor with its arrows or mouse wheel. The zoom rang
 A normal mouse wheel over the image continues to scroll it. Open and ROI save dialogs remember
 their most recently used directories independently.
 
-Use **Rectangle** or **Ellipse** to draw image-coordinate ROIs. Drag a shape to move it or use one of
-its eight handles to resize it. The selected shape is red and unselected shapes are white.
+Use **Rectangle**, **Ellipse**, **Circle**, or **Polygon** to draw image-coordinate ROIs. Finish a
+polygon by right-clicking after adding at least three vertices with the left button. Drag a shape to
+move it or use one of its handles to resize it. The selected shape is red and unselected shapes are
+white.
 Left-drag any handle to resize, or right-drag any handle to rotate around the shape's center.
 Right-click a shape to save, clone, or delete it. Right-click outside all shapes to save or delete
 all ROIs. Use the toolbar actions or **Ctrl+Z** and **Ctrl+Shift+Z** to undo and redo shape creation,
 movement, resizing, rotation, cloning, and deletion. Rotating the source image starts a new shape
-history. Saved files use PNG; ellipse pixels outside the shape are transparent.
+history. Saved files use PNG; pixels outside non-rectangular shapes are transparent.
 
 ## Nix outputs
 

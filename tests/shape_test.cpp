@@ -1,11 +1,14 @@
 #include "quickshot/roi_exporter.hpp"
+#include "quickshot/shapes/circle.hpp"
 #include "quickshot/shapes/ellipse.hpp"
+#include "quickshot/shapes/polygon.hpp"
 #include "quickshot/shapes/rectangle.hpp"
 #include "quickshot/shapes/shape_handle.hpp"
 
 #include <QColor>
 #include <QImage>
 #include <QImageReader>
+#include <QLineF>
 #include <QPointF>
 #include <QRectF>
 #include <QTemporaryDir>
@@ -20,6 +23,9 @@ private slots:
   void factoryCreatesConcreteShapes();
   void rectangleProvidesEightHandles();
   void ellipseProvidesEightHandles();
+  void circlePreservesItsAspectRatio();
+  void polygonProvidesVertexHandlesAndAClosedPath();
+  void polygonGeometryMementoRestoresVertices();
   void clonePreservesConcreteShape();
   void rotationTransformsPathAndHandles();
   void movesAndTransformsGeometry();
@@ -27,6 +33,7 @@ private slots:
   void geometryMementoRestoresResize();
   void extractsRectangleRoi();
   void extractsTransparentEllipseRoi();
+  void extractsTransparentPolygonRoi();
   void extractsRotatedRoi();
   void savesRoiAsPng();
 };
@@ -38,14 +45,69 @@ void ShapeTest::factoryCreatesConcreteShapes() {
       quickshot::Shape::make(quickshot::ShapeType::Rectangle, bounds);
   const std::unique_ptr<quickshot::Shape> ellipse =
       quickshot::Shape::make(quickshot::ShapeType::Ellipse, bounds);
+  const std::unique_ptr<quickshot::Shape> circle =
+      quickshot::Shape::make(quickshot::ShapeType::Circle, bounds);
+  const std::unique_ptr<quickshot::Shape> polygon =
+      quickshot::Shape::make(quickshot::ShapeType::Polygon, bounds);
 
   QVERIFY(dynamic_cast<const quickshot::Rectangle*>(rectangle.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipse.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Circle*>(circle.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Ellipse*>(circle.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Polygon*>(polygon.get()) != nullptr);
   QCOMPARE(rectangle->boundingRect(), bounds);
   QCOMPARE(ellipse->boundingRect(), bounds);
+  QCOMPARE(polygon->boundingRect(), bounds);
   QVERIFY_EXCEPTION_THROWN(
       static_cast<void>(quickshot::Shape::make(quickshot::ShapeType::Count, bounds)),
       std::invalid_argument);
+}
+
+void ShapeTest::circlePreservesItsAspectRatio() {
+  quickshot::Circle circle{QRectF{10.0, 20.0, 30.0, 40.0}};
+  QCOMPARE(circle.boundingRect(), QRectF(10.0, 25.0, 30.0, 30.0));
+  QCOMPARE(circle.handles().size(), std::size_t{8});
+
+  circle.updateCreation({20.0, 20.0}, {70.0, 50.0}, {0.0, 0.0, 100.0, 100.0});
+  QCOMPARE(circle.boundingRect(), QRectF(20.0, 20.0, 50.0, 50.0));
+
+  const std::unique_ptr<quickshot::ShapeGeometry> geometry = circle.captureGeometry();
+  circle.resize(*geometry, quickshot::ShapeHandle{quickshot::HandlePosition::BottomRight},
+                {80.0, 60.0}, {0.0, 0.0, 100.0, 100.0});
+  QCOMPARE(circle.boundingRect().width(), circle.boundingRect().height());
+  QCOMPARE(circle.handleCenter(quickshot::ShapeHandle{quickshot::HandlePosition::TopLeft}),
+           QPointF(20.0, 20.0));
+}
+
+void ShapeTest::polygonProvidesVertexHandlesAndAClosedPath() {
+  quickshot::Polygon polygon{QRectF{10.0, 10.0, 0.0, 0.0}};
+  polygon.appendPoint({70.0, 10.0});
+  polygon.appendPoint({40.0, 70.0});
+  polygon.setPreviewPoint({90.0, 90.0});
+
+  QCOMPARE(polygon.pointCount(), std::size_t{3});
+  QVERIFY(!polygon.isCreationComplete());
+  polygon.finishCreation();
+
+  QVERIFY(polygon.isCreationComplete());
+  QCOMPARE(polygon.handles().size(), std::size_t{3});
+  QCOMPARE(polygon.handleCenter(polygon.handles().back()), QPointF(40.0, 70.0));
+  QVERIFY(polygon.contains({40.0, 30.0}));
+  QVERIFY(!polygon.contains({90.0, 90.0}));
+}
+
+void ShapeTest::polygonGeometryMementoRestoresVertices() {
+  quickshot::Polygon polygon{{{10.0, 10.0}, {70.0, 10.0}, {40.0, 70.0}}};
+  polygon.setRotationDegrees(30.0);
+  const QPointF initialHandleCenter = polygon.handleCenter(polygon.handles()[1]);
+  const std::unique_ptr<quickshot::ShapeGeometry> geometry = polygon.captureGeometry();
+
+  polygon.resize(*geometry, polygon.handles()[1], {90.0, 20.0}, {0.0, 0.0, 100.0, 100.0});
+  const QLineF handleError{polygon.handleCenter(polygon.handles()[1]), QPointF{90.0, 20.0}};
+  QVERIFY(handleError.length() < 0.0001);
+
+  polygon.restoreGeometry(*geometry);
+  QCOMPARE(polygon.handleCenter(polygon.handles()[1]), initialHandleCenter);
 }
 
 void ShapeTest::rectangleProvidesEightHandles() {
@@ -77,13 +139,19 @@ void ShapeTest::ellipseProvidesEightHandles() {
 void ShapeTest::clonePreservesConcreteShape() {
   quickshot::Rectangle rectangle{QRectF{10.0, 20.0, 80.0, 40.0}};
   const quickshot::Ellipse ellipse{QRectF{5.0, 6.0, 30.0, 20.0}};
+  const quickshot::Circle circle{QRectF{4.0, 8.0, 20.0, 20.0}};
+  const quickshot::Polygon polygon{{{10.0, 10.0}, {70.0, 10.0}, {40.0, 70.0}}};
   rectangle.setRotationDegrees(42.0);
 
   const std::unique_ptr<quickshot::Shape> rectangleClone = rectangle.clone();
   const std::unique_ptr<quickshot::Shape> ellipseClone = ellipse.clone();
+  const std::unique_ptr<quickshot::Shape> circleClone = circle.clone();
+  const std::unique_ptr<quickshot::Shape> polygonClone = polygon.clone();
 
   QVERIFY(dynamic_cast<const quickshot::Rectangle*>(rectangleClone.get()) != nullptr);
   QVERIFY(dynamic_cast<const quickshot::Ellipse*>(ellipseClone.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Circle*>(circleClone.get()) != nullptr);
+  QVERIFY(dynamic_cast<const quickshot::Polygon*>(polygonClone.get()) != nullptr);
   QCOMPARE(rectangleClone->boundingRect(), rectangle.boundingRect());
   QCOMPARE(ellipseClone->boundingRect(), ellipse.boundingRect());
   QCOMPARE(rectangleClone->rotationDegrees(), 42.0);
@@ -161,6 +229,18 @@ void ShapeTest::extractsTransparentEllipseRoi() {
   QCOMPARE(roi.size(), QSize(10, 10));
   QCOMPARE(roi.pixelColor(0, 0).alpha(), 0);
   QCOMPARE(roi.pixelColor(5, 5), QColor(Qt::red));
+}
+
+void ShapeTest::extractsTransparentPolygonRoi() {
+  QImage image{{20, 20}, QImage::Format_RGB32};
+  image.fill(Qt::red);
+  const quickshot::Polygon polygon{{{2.0, 2.0}, {12.0, 2.0}, {2.0, 12.0}}};
+
+  const QImage roi = quickshot::extractRoi(image, polygon);
+
+  QCOMPARE(roi.size(), QSize(10, 10));
+  QCOMPARE(roi.pixelColor(1, 1), QColor(Qt::red));
+  QCOMPARE(roi.pixelColor(9, 9).alpha(), 0);
 }
 
 void ShapeTest::extractsRotatedRoi() {
