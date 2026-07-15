@@ -6,7 +6,7 @@
 
 namespace quickshot {
 
-class RectangularShape : public Shape {
+class BoxShape : public Shape {
 public:
   [[nodiscard]] QRectF boundingRect() const override;
   void setBoundingRect(const QRectF& bounds) override;
@@ -18,7 +18,7 @@ public:
               const QPointF& imagePoint, const QRectF& imageBounds) override;
 
 protected:
-  explicit RectangularShape(const QRectF& bounds);
+  explicit BoxShape(const QRectF& bounds);
   [[nodiscard]] virtual bool hasFixedAspectRatio() const noexcept;
 
 private:

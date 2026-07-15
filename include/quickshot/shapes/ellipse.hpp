@@ -1,10 +1,10 @@
 #pragma once
 
-#include "quickshot/shapes/rectangular_shape.hpp"
+#include "quickshot/shapes/box_shape.hpp"
 
 namespace quickshot {
 
-class Ellipse : public RectangularShape {
+class Ellipse : public BoxShape {
 public:
   explicit Ellipse(const QRectF& bounds);
 

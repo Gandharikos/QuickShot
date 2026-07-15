@@ -1,4 +1,4 @@
-#include "quickshot/shapes/rectangular_shape.hpp"
+#include "quickshot/shapes/box_shape.hpp"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -166,34 +166,34 @@ QRectF resizedSquareBounds(const QRectF& bounds, HandlePosition handle, const QP
 
 } // namespace
 
-RectangularShape::Geometry::Geometry(const QRectF& bounds, qreal rotationDegrees)
+BoxShape::Geometry::Geometry(const QRectF& bounds, qreal rotationDegrees)
     : bounds(bounds), rotationDegrees(rotationDegrees) {}
 
-bool RectangularShape::Geometry::equals(const ShapeGeometry& other) const noexcept {
+bool BoxShape::Geometry::equals(const ShapeGeometry& other) const noexcept {
   const auto* geometry = dynamic_cast<const Geometry*>(&other);
   return geometry != nullptr && bounds == geometry->bounds &&
          qFuzzyCompare(rotationDegrees + 1.0, geometry->rotationDegrees + 1.0);
 }
 
-RectangularShape::RectangularShape(const QRectF& bounds) : bounds_(bounds.normalized()) {}
+BoxShape::BoxShape(const QRectF& bounds) : bounds_(bounds.normalized()) {}
 
-QRectF RectangularShape::boundingRect() const { return bounds_; }
+QRectF BoxShape::boundingRect() const { return bounds_; }
 
-void RectangularShape::setBoundingRect(const QRectF& bounds) { bounds_ = bounds.normalized(); }
+void BoxShape::setBoundingRect(const QRectF& bounds) { bounds_ = bounds.normalized(); }
 
-bool RectangularShape::hasFixedAspectRatio() const noexcept { return false; }
+bool BoxShape::hasFixedAspectRatio() const noexcept { return false; }
 
-std::span<const ShapeHandle> RectangularShape::handles() const noexcept { return handles_; }
+std::span<const ShapeHandle> BoxShape::handles() const noexcept { return handles_; }
 
-QPointF RectangularShape::handleCenter(const ShapeHandle& handle) const {
+QPointF BoxShape::handleCenter(const ShapeHandle& handle) const {
   return mapToImage(rectangularHandleCenter(bounds_, handlePosition(handle)));
 }
 
-std::unique_ptr<ShapeGeometry> RectangularShape::captureGeometry() const {
+std::unique_ptr<ShapeGeometry> BoxShape::captureGeometry() const {
   return std::make_unique<Geometry>(bounds_, rotationDegrees());
 }
 
-void RectangularShape::restoreGeometry(const ShapeGeometry& geometry) {
+void BoxShape::restoreGeometry(const ShapeGeometry& geometry) {
   const auto* rectangularGeometry = dynamic_cast<const Geometry*>(&geometry);
   Q_ASSERT(rectangularGeometry != nullptr);
   if (rectangularGeometry == nullptr) {
@@ -204,8 +204,8 @@ void RectangularShape::restoreGeometry(const ShapeGeometry& geometry) {
   setRotationDegrees(rectangularGeometry->rotationDegrees);
 }
 
-void RectangularShape::resize(const ShapeGeometry& initialGeometry, const ShapeHandle& handle,
-                              const QPointF& imagePoint, const QRectF& imageBounds) {
+void BoxShape::resize(const ShapeGeometry& initialGeometry, const ShapeHandle& handle,
+                      const QPointF& imagePoint, const QRectF& imageBounds) {
   const auto* geometry = dynamic_cast<const Geometry*>(&initialGeometry);
   Q_ASSERT(geometry != nullptr);
   if (geometry == nullptr) {

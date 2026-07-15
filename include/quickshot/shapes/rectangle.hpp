@@ -1,10 +1,10 @@
 #pragma once
 
-#include "quickshot/shapes/rectangular_shape.hpp"
+#include "quickshot/shapes/box_shape.hpp"
 
 namespace quickshot {
 
-class Rectangle final : public RectangularShape {
+class Rectangle final : public BoxShape {
 public:
   explicit Rectangle(const QRectF& bounds);
 

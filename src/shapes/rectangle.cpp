@@ -5,7 +5,7 @@
 
 namespace quickshot {
 
-Rectangle::Rectangle(const QRectF& bounds) : RectangularShape(bounds) {}
+Rectangle::Rectangle(const QRectF& bounds) : BoxShape(bounds) {}
 
 std::unique_ptr<Shape> Rectangle::clone() const {
   auto rectangle = std::make_unique<Rectangle>(boundingRect());

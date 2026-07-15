@@ -30,22 +30,22 @@ add_library(
   src/main_window.cpp
   src/qdrawwidget.cpp
   src/roi_exporter.cpp
+  src/shapes/box_shape.cpp
   src/shapes/circle.cpp
   src/shapes/ellipse.cpp
   src/shapes/polygon.cpp
   src/shapes/rectangle.cpp
-  src/shapes/rectangular_shape.cpp
   src/shapes/shape.cpp
   include/quickshot/commands/shape_commands.hpp
   include/quickshot/drag_controller.hpp
   include/quickshot/main_window.hpp
   include/quickshot/qdrawwidget.hpp
   include/quickshot/roi_exporter.hpp
+  include/quickshot/shapes/box_shape.hpp
   include/quickshot/shapes/circle.hpp
   include/quickshot/shapes/ellipse.hpp
   include/quickshot/shapes/polygon.hpp
   include/quickshot/shapes/rectangle.hpp
-  include/quickshot/shapes/rectangular_shape.hpp
   include/quickshot/shapes/shape.hpp
   include/quickshot/shapes/shape_handle.hpp)
 target_include_directories(quickshot_ui PUBLIC include)

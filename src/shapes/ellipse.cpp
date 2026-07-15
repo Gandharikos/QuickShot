@@ -5,7 +5,7 @@
 
 namespace quickshot {
 
-Ellipse::Ellipse(const QRectF& bounds) : RectangularShape(bounds) {}
+Ellipse::Ellipse(const QRectF& bounds) : BoxShape(bounds) {}
 
 std::unique_ptr<Shape> Ellipse::clone() const {
   auto ellipse = std::make_unique<Ellipse>(boundingRect());
