@@ -6,6 +6,8 @@
 namespace quickshot {
 namespace {
 
+// A uniform Catmull-Rom tangent is half the distance between neighboring anchors.
+// A cubic Bezier control handle is one third of that tangent, hence 1 / 6.
 constexpr qreal controlPointScale = 1.0 / 6.0;
 
 void appendBezierSegment(QPainterPath& path, const QPointF& previous, const QPointF& current,
@@ -23,6 +25,7 @@ QPainterPath openBezierPath(const QPolygonF& anchors) {
 
   path.moveTo(anchors.front());
   for (qsizetype index = 0; index + 1 < anchors.size(); ++index) {
+    // Duplicate missing endpoint neighbors so the same conversion also works at both ends.
     const QPointF& previous = index == 0 ? anchors[index] : anchors[index - 1];
     const QPointF& current = anchors[index];
     const QPointF& next = anchors[index + 1];
@@ -40,6 +43,7 @@ QPainterPath closedBezierPath(const QPolygonF& anchors) {
 
   path.moveTo(anchors.front());
   for (qsizetype index = 0; index < anchors.size(); ++index) {
+    // Wrap neighboring indices so the last-to-first segment follows the same smooth tangent rule.
     const qsizetype previousIndex = (index + anchors.size() - 1) % anchors.size();
     const qsizetype nextIndex = (index + 1) % anchors.size();
     const qsizetype followingIndex = (index + 2) % anchors.size();
@@ -73,6 +77,7 @@ QPainterPath BezierCurve::localPath() const {
   }
 
   QPolygonF anchors = points();
+  // The cursor is a temporary next anchor for live preview; completing the shape discards it.
   if (previewPoint().has_value() && (anchors.empty() || anchors.back() != *previewPoint())) {
     anchors.push_back(*previewPoint());
   }
