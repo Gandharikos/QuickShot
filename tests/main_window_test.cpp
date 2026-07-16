@@ -11,6 +11,7 @@
 #include <QContextMenuEvent>
 #include <QCoreApplication>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -373,7 +374,8 @@ void MainWindowTest::remembersLastOpenDirectory() {
 
   bool firstDialogFound = false;
   bool imageSelected = false;
-  QTimer::singleShot(0, [&firstDialogFound, &imageSelected, &imagePath]() {
+  bool openButtonFound = false;
+  QTimer::singleShot(0, [&firstDialogFound, &imageSelected, &openButtonFound, &imagePath]() {
     auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
     if (dialog == nullptr) {
       return;
@@ -383,7 +385,13 @@ void MainWindowTest::remembersLastOpenDirectory() {
     dialog->setDirectory(imageFile.absolutePath());
     dialog->selectFile(imageFile.fileName());
     imageSelected = !dialog->selectedFiles().isEmpty();
-    QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    auto* buttonBox = dialog->findChild<QDialogButtonBox*>();
+    QPushButton* openButton =
+        buttonBox != nullptr ? buttonBox->button(QDialogButtonBox::Open) : nullptr;
+    openButtonFound = openButton != nullptr;
+    if (openButton != nullptr) {
+      openButton->click();
+    }
   });
   QTest::mouseClick(openButton, Qt::LeftButton);
   QCoreApplication::processEvents();
@@ -415,6 +423,7 @@ void MainWindowTest::remembersLastOpenDirectory() {
 
   QVERIFY(firstDialogFound);
   QVERIFY(imageSelected);
+  QVERIFY(openButtonFound);
   QCOMPARE(QFileInfo{savedDirectory}.canonicalFilePath(),
            QFileInfo{imageDirectory}.canonicalFilePath());
   QVERIFY(secondDialogFound);
