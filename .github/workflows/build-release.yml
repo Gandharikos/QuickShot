@@ -84,6 +84,10 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Print Windows QTest diagnostics
+        if: failure() && runner.os == 'Windows'
+        run: cmake -E cat build/quickshot_tests.txt
+
       - name: Package
         run: cpack --config build/CPackConfig.cmake -C Release -B dist
 

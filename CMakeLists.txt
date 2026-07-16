@@ -125,13 +125,11 @@ if(BUILD_TESTING)
   qt_add_executable(shape_tests tests/shape_test.cpp)
   target_link_libraries(shape_tests PRIVATE quickshot_ui Qt6::Test)
 
-  # Keep QTest diagnostics attached to the CI console on Windows. Qt otherwise
-  # marks qt_add_executable targets as GUI applications and hides test failures.
-  set_target_properties(drag_controller_tests quickshot_tests shape_tests
-                        PROPERTIES WIN32_EXECUTABLE FALSE)
-
   add_test(NAME drag_controller_tests COMMAND drag_controller_tests)
-  add_test(NAME quickshot_tests COMMAND quickshot_tests)
+  # Persist the QTest report because Windows runners can lose its console
+  # output.
+  add_test(NAME quickshot_tests COMMAND quickshot_tests -o
+                                        quickshot_tests.txt,txt)
   add_test(NAME shape_tests COMMAND shape_tests)
   set_tests_properties(drag_controller_tests quickshot_tests shape_tests
                        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
