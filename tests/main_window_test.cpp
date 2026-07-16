@@ -346,11 +346,15 @@ void MainWindowTest::providesImageControls() {
 
 void MainWindowTest::remembersLastOpenDirectory() {
   constexpr auto settingsKey = "image/lastOpenDirectory";
-  QSettings settings;
-  const bool hadPreviousValue = settings.contains(QString::fromLatin1(settingsKey));
-  const QVariant previousValue = settings.value(QString::fromLatin1(settingsKey));
-  settings.remove(QString::fromLatin1(settingsKey));
-  settings.sync();
+  bool hadPreviousValue = false;
+  QVariant previousValue;
+  {
+    QSettings settings;
+    hadPreviousValue = settings.contains(QString::fromLatin1(settingsKey));
+    previousValue = settings.value(QString::fromLatin1(settingsKey));
+    settings.remove(QString::fromLatin1(settingsKey));
+    settings.sync();
+  }
 
   QTemporaryDir temporaryDirectory;
   QVERIFY(temporaryDirectory.isValid());
@@ -380,8 +384,10 @@ void MainWindowTest::remembersLastOpenDirectory() {
   QTest::mouseClick(openButton, Qt::LeftButton);
   QCoreApplication::processEvents();
 
-  settings.sync();
-  const QString savedDirectory = settings.value(QString::fromLatin1(settingsKey)).toString();
+  QSettings persistedSettings;
+  persistedSettings.sync();
+  const QString savedDirectory =
+      persistedSettings.value(QString::fromLatin1(settingsKey)).toString();
   bool secondDialogFound = false;
   QString secondDialogDirectory;
   QTimer::singleShot(0, [&secondDialogFound, &secondDialogDirectory]() {
@@ -397,11 +403,11 @@ void MainWindowTest::remembersLastOpenDirectory() {
   QCoreApplication::processEvents();
 
   if (hadPreviousValue) {
-    settings.setValue(QString::fromLatin1(settingsKey), previousValue);
+    persistedSettings.setValue(QString::fromLatin1(settingsKey), previousValue);
   } else {
-    settings.remove(QString::fromLatin1(settingsKey));
+    persistedSettings.remove(QString::fromLatin1(settingsKey));
   }
-  settings.sync();
+  persistedSettings.sync();
 
   QVERIFY(firstDialogFound);
   QCOMPARE(QFileInfo{savedDirectory}.canonicalFilePath(),
