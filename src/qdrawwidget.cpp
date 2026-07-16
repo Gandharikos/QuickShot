@@ -147,21 +147,18 @@ QStringList QDrawWidget::loadImages(const QStringList& fileNames) {
     return rejectedFiles;
   }
 
-  cancelDrag();
-  undoGroup_.setActiveStack(&fallbackUndoStack_);
-  fallbackUndoStack_.clear();
-  image_ = {};
-  selectedShape_ = nullptr;
-  documents_.clear();
-  shapes_.clear();
-  documents_ = std::move(loadedDocuments);
-  for (const std::unique_ptr<ImageDocument>& document : documents_) {
+  const bool hadImages = !documents_.empty();
+  const qsizetype firstNewIndex = imageCount();
+  documents_.reserve(documents_.size() + loadedDocuments.size());
+  for (std::unique_ptr<ImageDocument>& document : loadedDocuments) {
     undoGroup_.addStack(&document->undoStack);
+    documents_.push_back(std::move(document));
   }
-  currentImageIndex_ = -1;
-  setCurrentImageIndex(0);
+  setCurrentImageIndex(firstNewIndex);
   emit imageCollectionChanged();
-  emit imageAvailabilityChanged(true);
+  if (!hadImages) {
+    emit imageAvailabilityChanged(true);
+  }
   return rejectedFiles;
 }
 
@@ -244,6 +241,59 @@ void QDrawWidget::setCurrentImageIndex(qsizetype index) {
     emit zoomFactorChanged(zoomFactor_);
   }
   emit currentImageChanged(currentImageIndex_);
+}
+
+void QDrawWidget::removeImage(qsizetype index) {
+  if (index < 0 || index >= imageCount()) {
+    return;
+  }
+
+  cancelDrag();
+  const bool removesCurrentImage = index == currentImageIndex_;
+  if (removesCurrentImage) {
+    storeCurrentDocument();
+    undoGroup_.setActiveStack(&fallbackUndoStack_);
+  }
+
+  ImageDocument& document = *documents_[static_cast<std::size_t>(index)];
+  undoGroup_.removeStack(&document.undoStack);
+  documents_.erase(documents_.begin() + index);
+
+  if (documents_.empty()) {
+    currentImageIndex_ = -1;
+    image_ = {};
+    shapes_.clear();
+    selectedShape_ = nullptr;
+    fallbackUndoStack_.clear();
+
+    const qreal previousZoom = zoomFactor_;
+    zoomFactor_ = 1.0;
+    horizontalScrollBar()->setValue(0);
+    verticalScrollBar()->setValue(0);
+    updateScrollBars();
+    viewport()->update();
+    emit cursorLeftImage();
+    if (!qFuzzyCompare(previousZoom, zoomFactor_)) {
+      emit zoomFactorChanged(zoomFactor_);
+    }
+    emit currentImageChanged(currentImageIndex_);
+    emit imageCollectionChanged();
+    emit imageAvailabilityChanged(false);
+    return;
+  }
+
+  if (removesCurrentImage) {
+    image_ = {};
+    shapes_.clear();
+    selectedShape_ = nullptr;
+    currentImageIndex_ = -1;
+    setCurrentImageIndex(std::min(index, imageCount() - 1));
+  } else if (index < currentImageIndex_) {
+    --currentImageIndex_;
+    emit currentImageChanged(currentImageIndex_);
+  }
+
+  emit imageCollectionChanged();
 }
 
 void QDrawWidget::setZoomFactor(qreal factor) {

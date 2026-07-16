@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
@@ -222,9 +223,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   imageDock->setAllowedAreas(Qt::LeftDockWidgetArea);
   imageList->setObjectName("imageListView");
   imageList->setViewMode(QListView::IconMode);
+  imageList->setFlow(QListView::TopToBottom);
   imageList->setMovement(QListView::Static);
   imageList->setResizeMode(QListView::Adjust);
   imageList->setWrapping(false);
+  imageList->setContextMenuPolicy(Qt::CustomContextMenu);
   imageList->setIconSize(thumbnailSize);
   imageList->setSpacing(6);
   imageList->setFixedWidth(150);
@@ -233,6 +236,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   imageDock->setWidget(imageList);
   addDockWidget(Qt::LeftDockWidgetArea, imageDock);
   imageDock->hide();
+
+  auto* deleteImageAction = new QAction{tr("Delete"), imageList};
+  deleteImageAction->setObjectName("deleteImageAction");
+  connect(deleteImageAction, &QAction::triggered, this, [this, deleteImageAction]() {
+    bool validIndex = false;
+    const qsizetype index = deleteImageAction->data().toLongLong(&validIndex);
+    if (validIndex) {
+      drawWidget_->removeImage(index);
+    }
+  });
+  connect(imageList, &QListWidget::customContextMenuRequested, imageList,
+          [imageList, deleteImageAction](const QPoint& position) {
+            QListWidgetItem* item = imageList->itemAt(position);
+            if (item == nullptr) {
+              return;
+            }
+
+            deleteImageAction->setData(imageList->row(item));
+            QMenu menu{imageList};
+            menu.addAction(deleteImageAction);
+            menu.exec(imageList->viewport()->mapToGlobal(position));
+          });
 
   connect(imageList, &QListWidget::currentRowChanged, drawWidget_,
           &QDrawWidget::setCurrentImageIndex);
@@ -287,7 +312,7 @@ void MainWindow::openImage() {
   }
 
   QSettings{}.setValue(QString::fromLatin1(lastOpenDirectoryKey),
-                       QFileInfo{drawWidget_->imagePathAt(0)}.absolutePath());
+                       QFileInfo{fileNames.constFirst()}.absolutePath());
 }
 
 } // namespace quickshot

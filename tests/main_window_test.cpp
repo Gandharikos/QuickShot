@@ -128,6 +128,33 @@ bool triggerContextMenuAction(quickshot::QDrawWidget& drawWidget, const QPoint& 
   return actionFound;
 }
 
+bool triggerImageListContextMenuAction(QListWidget& imageList, int row, const char* actionName) {
+  bool actionFound = false;
+  QTimer::singleShot(0, [&actionFound, actionName]() {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (menu == nullptr) {
+      return;
+    }
+
+    for (QAction* action : menu->actions()) {
+      if (action->objectName() == QLatin1String{actionName}) {
+        actionFound = true;
+        action->trigger();
+        break;
+      }
+    }
+    menu->close();
+  });
+
+  QListWidgetItem* item = imageList.item(row);
+  if (item == nullptr) {
+    return false;
+  }
+  emit imageList.customContextMenuRequested(imageList.visualItemRect(item).center());
+  QCoreApplication::processEvents();
+  return actionFound;
+}
+
 struct BatchDialogSnapshot {
   bool actionFound = false;
   bool dialogFound = false;
@@ -742,10 +769,14 @@ void MainWindowTest::switchesIndependentImageDocuments() {
   firstImage.fill(Qt::black);
   QImage secondImage({180, 140}, QImage::Format_RGB32);
   secondImage.fill(Qt::blue);
+  QImage thirdImage({200, 160}, QImage::Format_RGB32);
+  thirdImage.fill(Qt::green);
   const QString firstPath = temporaryDirectory.filePath("first.png");
   const QString secondPath = temporaryDirectory.filePath("second.png");
+  const QString thirdPath = temporaryDirectory.filePath("third.png");
   QVERIFY(firstImage.save(firstPath));
   QVERIFY(secondImage.save(secondPath));
+  QVERIFY(thirdImage.save(thirdPath));
 
   quickshot::MainWindow window;
   auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
@@ -757,14 +788,14 @@ void MainWindowTest::switchesIndependentImageDocuments() {
   window.show();
   QCoreApplication::processEvents();
 
-  QVERIFY(drawWidget->loadImages({firstPath, secondPath}).isEmpty());
+  QVERIFY(drawWidget->loadImage(firstPath));
   QCoreApplication::processEvents();
-  QCOMPARE(drawWidget->imageCount(), qsizetype{2});
+  QCOMPARE(drawWidget->imageCount(), qsizetype{1});
   QCOMPARE(drawWidget->currentImageIndex(), qsizetype{0});
-  QCOMPARE(imageList->count(), 2);
+  QCOMPARE(imageList->count(), 1);
   QVERIFY(!imageList->item(0)->icon().isNull());
-  QVERIFY(!imageList->item(1)->icon().isNull());
-  QVERIFY(!imageDock->isHidden());
+  QVERIFY(imageDock->isHidden());
+  QCOMPARE(imageList->flow(), QListView::TopToBottom);
   QVERIFY(imageList->styleSheet().contains(QStringLiteral("border")));
 
   drawWidget->setCreationMode(quickshot::ShapeType::Rectangle, true);
@@ -772,9 +803,14 @@ void MainWindowTest::switchesIndependentImageDocuments() {
   QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
   QCOMPARE(drawWidget->undoStack().count(), 1);
 
-  imageList->setCurrentRow(1);
+  QVERIFY(drawWidget->loadImages({secondPath, thirdPath}).isEmpty());
   QCoreApplication::processEvents();
+  QCOMPARE(drawWidget->imageCount(), qsizetype{3});
   QCOMPARE(drawWidget->currentImageIndex(), qsizetype{1});
+  QCOMPARE(imageList->count(), 3);
+  QVERIFY(!imageList->item(1)->icon().isNull());
+  QVERIFY(!imageList->item(2)->icon().isNull());
+  QVERIFY(!imageDock->isHidden());
   QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
   QCOMPARE(drawWidget->undoStack().count(), 0);
   drag(drawWidget->viewport(), {90, 30}, {150, 100});
@@ -786,13 +822,32 @@ void MainWindowTest::switchesIndependentImageDocuments() {
   QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
   QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(20.0, 20.0, 60.0, 50.0));
   QCOMPARE(drawWidget->undoStack().count(), 1);
-  drawWidget->undoStack().undo();
-  QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
 
-  QVERIFY(drawWidget->loadImage(firstPath));
+  imageList->setCurrentRow(1);
   QCoreApplication::processEvents();
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget->undoStack().count(), 1);
+
+  QVERIFY(triggerImageListContextMenuAction(*imageList, 0, "deleteImageAction"));
+  QCOMPARE(drawWidget->imageCount(), qsizetype{2});
+  QCOMPARE(drawWidget->currentImageIndex(), qsizetype{0});
+  QCOMPARE(drawWidget->imagePathAt(0), secondPath);
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget->undoStack().count(), 1);
+
+  QVERIFY(triggerImageListContextMenuAction(*imageList, 0, "deleteImageAction"));
+  QCOMPARE(drawWidget->imageCount(), qsizetype{1});
+  QCOMPARE(drawWidget->currentImageIndex(), qsizetype{0});
+  QCOMPARE(drawWidget->imagePathAt(0), thirdPath);
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
   QCOMPARE(imageList->count(), 1);
   QVERIFY(imageDock->isHidden());
+
+  drawWidget->removeImage(0);
+  QCOMPARE(drawWidget->imageCount(), qsizetype{0});
+  QCOMPARE(drawWidget->currentImageIndex(), qsizetype{-1});
+  QVERIFY(!drawWidget->hasImage());
+  QCOMPARE(imageList->count(), 0);
 }
 
 void MainWindowTest::batchSaveUsesOnlyCurrentImageShapes() {

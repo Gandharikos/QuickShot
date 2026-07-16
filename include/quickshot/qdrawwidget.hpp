@@ -55,6 +55,7 @@ public:
   [[nodiscard]] QUndoGroup& undoGroup() noexcept;
   [[nodiscard]] const QUndoGroup& undoGroup() const noexcept;
   void setCurrentImageIndex(qsizetype index);
+  void removeImage(qsizetype index);
   void setZoomFactor(qreal factor);
   void setCreationMode(ShapeType type, bool enabled);
   void rotateLeft();
