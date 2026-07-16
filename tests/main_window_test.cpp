@@ -372,13 +372,17 @@ void MainWindowTest::remembersLastOpenDirectory() {
   QCoreApplication::processEvents();
 
   bool firstDialogFound = false;
-  QTimer::singleShot(0, [&firstDialogFound, &imagePath]() {
+  bool imageSelected = false;
+  QTimer::singleShot(0, [&firstDialogFound, &imageSelected, &imagePath]() {
     auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
     if (dialog == nullptr) {
       return;
     }
     firstDialogFound = true;
-    dialog->selectFile(imagePath);
+    const QFileInfo imageFile{imagePath};
+    dialog->setDirectory(imageFile.absolutePath());
+    dialog->selectFile(imageFile.fileName());
+    imageSelected = !dialog->selectedFiles().isEmpty();
     QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
   });
   QTest::mouseClick(openButton, Qt::LeftButton);
@@ -410,6 +414,7 @@ void MainWindowTest::remembersLastOpenDirectory() {
   persistedSettings.sync();
 
   QVERIFY(firstDialogFound);
+  QVERIFY(imageSelected);
   QCOMPARE(QFileInfo{savedDirectory}.canonicalFilePath(),
            QFileInfo{imageDirectory}.canonicalFilePath());
   QVERIFY(secondDialogFound);
