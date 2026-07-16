@@ -77,8 +77,8 @@ a GitHub Release containing the Linux `.tar.gz`, macOS `.dmg`, Windows `.zip`, a
 `SHA256SUMS.txt` files:
 
 ```console
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 The macOS and Windows packages are currently unsigned, so their operating systems may show a

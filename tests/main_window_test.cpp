@@ -1241,6 +1241,12 @@ int main(int argc, char* argv[]) {
   QApplication application{argc, argv};
   QApplication::setApplicationName(QStringLiteral("Quickshot Tests"));
   QApplication::setOrganizationName(QStringLiteral("Quickshot"));
+  QTemporaryDir settingsDirectory;
+  if (!settingsDirectory.isValid()) {
+    return 1;
+  }
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
   MainWindowTest test;
   return QTest::qExec(&test, argc, argv);
 }
