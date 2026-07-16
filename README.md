@@ -1,5 +1,7 @@
 # Quickshot
 
+[![Build and Release](https://github.com/Gandharikos/QuickShot/actions/workflows/build-release.yml/badge.svg)](https://github.com/Gandharikos/QuickShot/actions/workflows/build-release.yml)
+
 A small C++20 and Qt 6 Widgets project template with a reproducible Nix development and build
 environment.
 
@@ -63,6 +65,24 @@ nix run .#generate-compile-commands    # configure clangd/IDE metadata
 
 The template is also exposed as a flake template. From another directory, use
 `nix flake init -t path:/path/to/quickshot`.
+
+## Downloads and releases
+
+GitHub Actions builds and tests Linux x86-64, universal macOS, and Windows x86-64 packages for
+every push and pull request. Download development packages from the workflow run's **Artifacts**
+section.
+
+To publish the current CMake project version, push a matching `v*` tag. The release workflow creates
+a GitHub Release containing the Linux `.tar.gz`, macOS `.dmg`, Windows `.zip`, and
+`SHA256SUMS.txt` files:
+
+```console
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The macOS and Windows packages are currently unsigned, so their operating systems may show a
+Gatekeeper or SmartScreen warning on first launch.
 
 ## Git hooks
 

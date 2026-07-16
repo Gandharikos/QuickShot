@@ -10,6 +10,8 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(QUICKSHOT_ENABLE_CLANG_TIDY "Run clang-tidy while compiling" OFF)
+option(QUICKSHOT_ENABLE_DEPLOYMENT
+       "Bundle runtime dependencies and enable platform packages" OFF)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -85,7 +87,31 @@ target_link_libraries(quickshot PRIVATE quickshot_ui)
 target_compile_definitions(quickshot
                            PRIVATE QUICKSHOT_VERSION="${PROJECT_VERSION}")
 
-install(TARGETS quickshot RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(APPLE)
+  set_target_properties(
+    quickshot
+    PROPERTIES MACOSX_BUNDLE TRUE
+               MACOSX_BUNDLE_BUNDLE_NAME "QuickShot"
+               MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.gandharikos.quickshot"
+               MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+               MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+               OUTPUT_NAME "QuickShot")
+elseif(WIN32)
+  set_target_properties(quickshot PROPERTIES OUTPUT_NAME "QuickShot"
+                                             WIN32_EXECUTABLE TRUE)
+endif()
+
+install(
+  TARGETS quickshot
+  BUNDLE DESTINATION .
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+if(QUICKSHOT_ENABLE_DEPLOYMENT)
+  qt_generate_deploy_app_script(
+    TARGET quickshot OUTPUT_SCRIPT quickshot_deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR)
+  install(SCRIPT ${quickshot_deploy_script})
+endif()
 
 if(BUILD_TESTING)
   find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
@@ -104,4 +130,28 @@ if(BUILD_TESTING)
   add_test(NAME shape_tests COMMAND shape_tests)
   set_tests_properties(drag_controller_tests quickshot_tests shape_tests
                        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
+if(QUICKSHOT_ENABLE_DEPLOYMENT)
+  set(CPACK_PACKAGE_NAME "QuickShot")
+  set(CPACK_PACKAGE_VENDOR "Gandharikos")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+      "A modern C++20 and Qt 6 image ROI editor")
+  set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "QuickShot")
+  set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+  set(CPACK_VERBATIM_VARIABLES YES)
+
+  if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_PACKAGE_FILE_NAME "QuickShot-${PROJECT_VERSION}-windows-x86_64")
+  elseif(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+    set(CPACK_PACKAGE_FILE_NAME "QuickShot-${PROJECT_VERSION}-macos-universal")
+  else()
+    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_PACKAGE_FILE_NAME "QuickShot-${PROJECT_VERSION}-linux-x86_64")
+  endif()
+
+  include(CPack)
 endif()
