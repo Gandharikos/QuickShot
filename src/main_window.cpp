@@ -311,8 +311,10 @@ void MainWindow::openImage() {
                          tr("These files could not be opened:\n%1").arg(rejectedFiles.join('\n')));
   }
 
-  QSettings{}.setValue(QString::fromLatin1(lastOpenDirectoryKey),
-                       QFileInfo{fileNames.constFirst()}.absolutePath());
+  QSettings settings;
+  settings.setValue(QString::fromLatin1(lastOpenDirectoryKey),
+                    QFileInfo{fileNames.constFirst()}.absolutePath());
+  settings.sync();
 }
 
 } // namespace quickshot
