@@ -1239,6 +1239,8 @@ void MainWindowTest::rejectsNonImageFiles() {
 int main(int argc, char* argv[]) {
   QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
   QApplication application{argc, argv};
+  QApplication::setApplicationName(QStringLiteral("Quickshot Tests"));
+  QApplication::setOrganizationName(QStringLiteral("Quickshot"));
   MainWindowTest test;
   return QTest::qExec(&test, argc, argv);
 }
