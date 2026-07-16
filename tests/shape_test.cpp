@@ -34,6 +34,7 @@ private slots:
   void shapeHandlesExposeIdsCentersAndCursors();
   void geometryMementoRestoresResize();
   void extractsRectangleRoi();
+  void validatesRoiBoundsAgainstImage();
   void extractsTransparentEllipseRoi();
   void extractsTransparentPolygonRoi();
   void extractsTransparentBezierRoi();
@@ -254,6 +255,19 @@ void ShapeTest::extractsRectangleRoi() {
   QCOMPARE(roi.size(), QSize(5, 4));
   QCOMPARE(roi.pixelColor(0, 0), QColor(Qt::red));
   QCOMPARE(roi.pixelColor(4, 3), QColor(Qt::red));
+}
+
+void ShapeTest::validatesRoiBoundsAgainstImage() {
+  const QImage image{{20, 20}, QImage::Format_RGB32};
+  const quickshot::Rectangle inside{QRectF{2.0, 3.0, 5.0, 4.0}};
+  const quickshot::Rectangle touchingEdge{QRectF{15.0, 15.0, 5.0, 5.0}};
+  const quickshot::Rectangle partiallyOutside{QRectF{15.0, 15.0, 6.0, 5.0}};
+  const quickshot::Rectangle outside{QRectF{22.0, 22.0, 5.0, 5.0}};
+
+  QVERIFY(quickshot::isRoiWithinImage(image, inside));
+  QVERIFY(quickshot::isRoiWithinImage(image, touchingEdge));
+  QVERIFY(!quickshot::isRoiWithinImage(image, partiallyOutside));
+  QVERIFY(!quickshot::isRoiWithinImage(image, outside));
 }
 
 void ShapeTest::extractsTransparentEllipseRoi() {

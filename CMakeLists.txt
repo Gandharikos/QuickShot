@@ -25,6 +25,7 @@ endif()
 
 add_library(
   quickshot_ui STATIC
+  src/batch_save_dialog.cpp
   src/commands/shape_commands.cpp
   src/drag_controller.cpp
   src/main_window.cpp
@@ -38,6 +39,7 @@ add_library(
   src/shapes/polygon.cpp
   src/shapes/rectangle.cpp
   src/shapes/shape.cpp
+  include/quickshot/batch_save_dialog.hpp
   include/quickshot/commands/shape_commands.hpp
   include/quickshot/drag_controller.hpp
   include/quickshot/main_window.hpp

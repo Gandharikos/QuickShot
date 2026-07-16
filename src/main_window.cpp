@@ -6,28 +6,36 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QDir>
+#include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
 #include <QImageReader>
 #include <QKeySequence>
+#include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QStandardPaths>
+#include <QStatusBar>
 #include <QStringList>
 #include <QStyle>
 #include <QSvgRenderer>
 #include <QToolBar>
+#include <QtMath>
 
 namespace quickshot {
 
 namespace {
 
 constexpr auto lastOpenDirectoryKey = "image/lastOpenDirectory";
+constexpr QSize thumbnailSize{120, 90};
 
 QString defaultOpenDirectory() {
   QString directory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
@@ -83,8 +91,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   toolbar->addWidget(openButton);
   toolbar->addSeparator();
 
-  QAction* undoAction = drawWidget_->undoStack().createUndoAction(this, tr("Undo"));
-  QAction* redoAction = drawWidget_->undoStack().createRedoAction(this, tr("Redo"));
+  QAction* undoAction = drawWidget_->undoGroup().createUndoAction(this, tr("Undo"));
+  QAction* redoAction = drawWidget_->undoGroup().createRedoAction(this, tr("Redo"));
   undoAction->setObjectName("undoAction");
   redoAction->setObjectName("redoAction");
   undoAction->setIcon(
@@ -196,24 +204,90 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, bezierCurveAction,
           &QAction::setEnabled);
 
+  auto* coordinateLabel = new QLabel(tr("X: —  Y: —"), this);
+  coordinateLabel->setObjectName("coordinateLabel");
+  statusBar()->addPermanentWidget(coordinateLabel);
+  connect(drawWidget_, &QDrawWidget::cursorImagePositionChanged, coordinateLabel,
+          [coordinateLabel](const QPointF& position) {
+            coordinateLabel->setText(
+                MainWindow::tr("X: %1  Y: %2").arg(qFloor(position.x())).arg(qFloor(position.y())));
+          });
+  connect(drawWidget_, &QDrawWidget::cursorLeftImage, coordinateLabel,
+          [coordinateLabel]() { coordinateLabel->setText(MainWindow::tr("X: —  Y: —")); });
+
+  auto* imageDock = new QDockWidget(tr("Images"), this);
+  auto* imageList = new QListWidget(imageDock);
+  imageDock->setObjectName("imageDockWidget");
+  imageDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+  imageDock->setAllowedAreas(Qt::LeftDockWidgetArea);
+  imageList->setObjectName("imageListView");
+  imageList->setViewMode(QListView::IconMode);
+  imageList->setMovement(QListView::Static);
+  imageList->setResizeMode(QListView::Adjust);
+  imageList->setWrapping(false);
+  imageList->setIconSize(thumbnailSize);
+  imageList->setSpacing(6);
+  imageList->setFixedWidth(150);
+  imageList->setStyleSheet(
+      QStringLiteral("QListWidget::item:selected { border: 2px solid #ef5350; }"));
+  imageDock->setWidget(imageList);
+  addDockWidget(Qt::LeftDockWidgetArea, imageDock);
+  imageDock->hide();
+
+  connect(imageList, &QListWidget::currentRowChanged, drawWidget_,
+          &QDrawWidget::setCurrentImageIndex);
+  connect(drawWidget_, &QDrawWidget::currentImageChanged, imageList, [imageList](qsizetype index) {
+    const QSignalBlocker blocker{imageList};
+    imageList->setCurrentRow(static_cast<int>(index));
+  });
+  connect(drawWidget_, &QDrawWidget::imageCollectionChanged, imageList,
+          [this, imageDock, imageList]() {
+            const QSignalBlocker blocker{imageList};
+            imageList->clear();
+            for (qsizetype index = 0; index < drawWidget_->imageCount(); ++index) {
+              const QString filePath = drawWidget_->imagePathAt(index);
+              auto* item = new QListWidgetItem{
+                  QIcon{QPixmap::fromImage(drawWidget_->thumbnailAt(index, thumbnailSize))},
+                  QFileInfo{filePath}.fileName(), imageList};
+              item->setToolTip(filePath);
+              item->setSizeHint({140, 120});
+              item->setTextAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+            }
+            imageList->setCurrentRow(static_cast<int>(drawWidget_->currentImageIndex()));
+            imageDock->setVisible(drawWidget_->imageCount() > 1);
+          });
+  connect(drawWidget_, &QDrawWidget::imageThumbnailChanged, imageList,
+          [this, imageList](qsizetype index) {
+            QListWidgetItem* item = imageList->item(static_cast<int>(index));
+            if (item != nullptr) {
+              item->setIcon(
+                  QIcon{QPixmap::fromImage(drawWidget_->thumbnailAt(index, thumbnailSize))});
+            }
+          });
+
   setCentralWidget(drawWidget_);
 }
 
 void MainWindow::openImage() {
-  const QString fileName =
-      QFileDialog::getOpenFileName(this, tr("Open Image"), lastOpenDirectory(), imageFilter());
-  if (fileName.isEmpty()) {
+  const QStringList fileNames =
+      QFileDialog::getOpenFileNames(this, tr("Open Images"), lastOpenDirectory(), imageFilter());
+  if (fileNames.isEmpty()) {
     return;
   }
 
-  if (!drawWidget_->loadImage(fileName)) {
+  const QStringList rejectedFiles = drawWidget_->loadImages(fileNames);
+  if (rejectedFiles.size() == fileNames.size()) {
     QMessageBox::warning(this, tr("Invalid Image"),
-                         tr("The selected file is not a supported image."));
+                         tr("None of the selected files is a supported image."));
     return;
+  }
+  if (!rejectedFiles.isEmpty()) {
+    QMessageBox::warning(this, tr("Some Images Were Skipped"),
+                         tr("These files could not be opened:\n%1").arg(rejectedFiles.join('\n')));
   }
 
   QSettings{}.setValue(QString::fromLatin1(lastOpenDirectoryKey),
-                       QFileInfo{fileName}.absolutePath());
+                       QFileInfo{drawWidget_->imagePathAt(0)}.absolutePath());
 }
 
 } // namespace quickshot

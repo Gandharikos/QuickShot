@@ -1,5 +1,6 @@
 #include "quickshot/qdrawwidget.hpp"
 
+#include "quickshot/batch_save_dialog.hpp"
 #include "quickshot/commands/shape_commands.hpp"
 #include "quickshot/roi_exporter.hpp"
 #include "quickshot/shapes/shape.hpp"
@@ -9,6 +10,7 @@
 #include <QColor>
 #include <QContextMenuEvent>
 #include <QCursor>
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -90,7 +92,22 @@ const DragState& creationState(const Shape& shape) {
 
 } // namespace
 
-QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent), undoStack_(this) {
+class QDrawWidget::ImageDocument final {
+public:
+  ImageDocument(QString filePath, QImage image)
+      : filePath(std::move(filePath)), image(std::move(image)) {}
+
+  QString filePath;
+  QImage image;
+  std::vector<std::unique_ptr<::quickshot::Shape>> shapes;
+  ::quickshot::Shape* selectedShape = nullptr;
+  QUndoStack undoStack;
+};
+
+QDrawWidget::QDrawWidget(QWidget* parent)
+    : QAbstractScrollArea(parent), undoGroup_(this), fallbackUndoStack_(this) {
+  undoGroup_.addStack(&fallbackUndoStack_);
+  undoGroup_.setActiveStack(&fallbackUndoStack_);
   setFrameShape(QFrame::NoFrame);
   viewport()->setAutoFillBackground(false);
   viewport()->setMouseTracking(true);
@@ -108,34 +125,67 @@ QDrawWidget::QDrawWidget(QWidget* parent) : QAbstractScrollArea(parent), undoSta
 
 QDrawWidget::~QDrawWidget() = default;
 
-bool QDrawWidget::loadImage(const QString& fileName) {
-  QImageReader reader(fileName);
-  reader.setAutoTransform(true);
+bool QDrawWidget::loadImage(const QString& fileName) { return loadImages({fileName}).isEmpty(); }
 
-  QImage image = reader.read();
-  if (image.isNull()) {
-    return false;
+QStringList QDrawWidget::loadImages(const QStringList& fileNames) {
+  QStringList rejectedFiles;
+  std::vector<std::unique_ptr<ImageDocument>> loadedDocuments;
+  loadedDocuments.reserve(static_cast<std::size_t>(fileNames.size()));
+  for (const QString& fileName : fileNames) {
+    QImageReader reader{fileName};
+    reader.setAutoTransform(true);
+    QImage image = reader.read();
+    if (image.isNull()) {
+      rejectedFiles.push_back(fileName);
+      continue;
+    }
+    loadedDocuments.push_back(
+        std::make_unique<ImageDocument>(QFileInfo{fileName}.absoluteFilePath(), std::move(image)));
+  }
+
+  if (loadedDocuments.empty()) {
+    return rejectedFiles;
   }
 
   cancelDrag();
-  image_ = std::move(image);
-  undoStack_.clear();
-  shapes_.clear();
+  undoGroup_.setActiveStack(&fallbackUndoStack_);
+  fallbackUndoStack_.clear();
+  image_ = {};
   selectedShape_ = nullptr;
-  const qreal previousZoom = zoomFactor_;
-  zoomFactor_ = 1.0;
-  horizontalScrollBar()->setValue(0);
-  verticalScrollBar()->setValue(0);
-  updateScrollBars();
-  viewport()->update();
-  if (!qFuzzyCompare(previousZoom, zoomFactor_)) {
-    emit zoomFactorChanged(zoomFactor_);
+  documents_.clear();
+  shapes_.clear();
+  documents_ = std::move(loadedDocuments);
+  for (const std::unique_ptr<ImageDocument>& document : documents_) {
+    undoGroup_.addStack(&document->undoStack);
   }
+  currentImageIndex_ = -1;
+  setCurrentImageIndex(0);
+  emit imageCollectionChanged();
   emit imageAvailabilityChanged(true);
-  return true;
+  return rejectedFiles;
 }
 
 bool QDrawWidget::hasImage() const noexcept { return !image_.isNull(); }
+
+qsizetype QDrawWidget::imageCount() const noexcept {
+  return static_cast<qsizetype>(documents_.size());
+}
+
+qsizetype QDrawWidget::currentImageIndex() const noexcept { return currentImageIndex_; }
+
+QString QDrawWidget::imagePathAt(qsizetype index) const {
+  if (index < 0 || index >= imageCount()) {
+    return {};
+  }
+  return documents_[static_cast<std::size_t>(index)]->filePath;
+}
+
+QImage QDrawWidget::thumbnailAt(qsizetype index, const QSize& size) const {
+  if (index < 0 || index >= imageCount()) {
+    return {};
+  }
+  return documentImage(index).scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
 
 qreal QDrawWidget::zoomFactor() const noexcept { return zoomFactor_; }
 
@@ -154,9 +204,47 @@ const ::quickshot::Shape* QDrawWidget::shapeAt(qsizetype index) const {
   return position < shapes_.size() ? shapes_[position].get() : nullptr;
 }
 
-QUndoStack& QDrawWidget::undoStack() noexcept { return undoStack_; }
+QUndoStack& QDrawWidget::undoStack() noexcept {
+  Q_ASSERT(undoGroup_.activeStack() != nullptr);
+  return *undoGroup_.activeStack();
+}
 
-const QUndoStack& QDrawWidget::undoStack() const noexcept { return undoStack_; }
+const QUndoStack& QDrawWidget::undoStack() const noexcept {
+  Q_ASSERT(undoGroup_.activeStack() != nullptr);
+  return *undoGroup_.activeStack();
+}
+
+QUndoGroup& QDrawWidget::undoGroup() noexcept { return undoGroup_; }
+
+const QUndoGroup& QDrawWidget::undoGroup() const noexcept { return undoGroup_; }
+
+void QDrawWidget::setCurrentImageIndex(qsizetype index) {
+  if (index < 0 || index >= imageCount() || index == currentImageIndex_) {
+    return;
+  }
+
+  cancelDrag();
+  storeCurrentDocument();
+  ImageDocument& document = *documents_[static_cast<std::size_t>(index)];
+  image_ = document.image;
+  shapes_ = std::move(document.shapes);
+  selectedShape_ = document.selectedShape;
+  document.selectedShape = nullptr;
+  currentImageIndex_ = index;
+  undoGroup_.setActiveStack(&document.undoStack);
+
+  const qreal previousZoom = zoomFactor_;
+  zoomFactor_ = 1.0;
+  horizontalScrollBar()->setValue(0);
+  verticalScrollBar()->setValue(0);
+  updateScrollBars();
+  viewport()->update();
+  emit cursorLeftImage();
+  if (!qFuzzyCompare(previousZoom, zoomFactor_)) {
+    emit zoomFactorChanged(zoomFactor_);
+  }
+  emit currentImageChanged(currentImageIndex_);
+}
 
 void QDrawWidget::setZoomFactor(qreal factor) {
   const qreal boundedFactor = std::clamp(factor, minimumZoom, maximumZoom);
@@ -201,12 +289,18 @@ void QDrawWidget::contextMenuEvent(QContextMenuEvent* event) {
   if (targetShape != nullptr) {
     selectedShape_ = targetShape;
     viewport()->update();
-    menu.addActions({saveRoiAction_, cloneShapeAction_, deleteShapeAction_});
+    batchSaveRoiAction_->setEnabled(imageCount() > 1);
+    menu.addActions({saveRoiAction_, batchSaveRoiAction_});
+    menu.addSeparator();
+    menu.addActions({cloneShapeAction_, deleteShapeAction_});
   } else {
     const bool hasShapes = !shapes_.empty();
     saveAllRoisAction_->setEnabled(hasShapes);
+    batchSaveAllRoisAction_->setEnabled(hasShapes && imageCount() > 1);
     deleteAllShapesAction_->setEnabled(hasShapes);
-    menu.addActions({saveAllRoisAction_, deleteAllShapesAction_});
+    menu.addActions({saveAllRoisAction_, batchSaveAllRoisAction_});
+    menu.addSeparator();
+    menu.addAction(deleteAllShapesAction_);
   }
 
   menu.exec(event->globalPos());
@@ -217,6 +311,10 @@ void QDrawWidget::initializeContextActions() {
   saveRoiAction_ = new QAction{tr("Save ROI"), this};
   saveRoiAction_->setObjectName("saveRoiAction");
   connect(saveRoiAction_, &QAction::triggered, this, &QDrawWidget::saveSelectedRoi);
+
+  batchSaveRoiAction_ = new QAction{tr("Batch Save"), this};
+  batchSaveRoiAction_->setObjectName("batchSaveRoiAction");
+  connect(batchSaveRoiAction_, &QAction::triggered, this, &QDrawWidget::batchSaveSelectedRoi);
 
   cloneShapeAction_ = new QAction{tr("Clone"), this};
   cloneShapeAction_->setObjectName("cloneShapeAction");
@@ -230,6 +328,10 @@ void QDrawWidget::initializeContextActions() {
   saveAllRoisAction_->setObjectName("saveAllRoisAction");
   connect(saveAllRoisAction_, &QAction::triggered, this, &QDrawWidget::saveAllRois);
 
+  batchSaveAllRoisAction_ = new QAction{tr("Batch Save All"), this};
+  batchSaveAllRoisAction_->setObjectName("batchSaveAllRoisAction");
+  connect(batchSaveAllRoisAction_, &QAction::triggered, this, &QDrawWidget::batchSaveAllRois);
+
   deleteAllShapesAction_ = new QAction{tr("Delete All"), this};
   deleteAllShapesAction_->setObjectName("deleteAllShapesAction");
   connect(deleteAllShapesAction_, &QAction::triggered, this, &QDrawWidget::deleteAllShapes);
@@ -238,6 +340,12 @@ void QDrawWidget::initializeContextActions() {
 void QDrawWidget::saveSelectedRoi() {
   if (selectedShape_ != nullptr) {
     saveRois({selectedShape_});
+  }
+}
+
+void QDrawWidget::batchSaveSelectedRoi() {
+  if (selectedShape_ != nullptr) {
+    batchSaveRois({selectedShape_});
   }
 }
 
@@ -262,12 +370,34 @@ void QDrawWidget::saveAllRois() {
   saveRois(targets);
 }
 
+void QDrawWidget::batchSaveAllRois() {
+  std::vector<const ::quickshot::Shape*> targets;
+  targets.reserve(shapes_.size());
+  for (const std::unique_ptr<::quickshot::Shape>& shape : shapes_) {
+    targets.push_back(shape.get());
+  }
+  batchSaveRois(targets);
+}
+
 void QDrawWidget::deleteAllShapes() {
   pushCommand(std::make_unique<DeleteAllShapesCommand>(*this));
 }
 
+void QDrawWidget::leaveEvent(QEvent* event) {
+  emit cursorLeftImage();
+  QAbstractScrollArea::leaveEvent(event);
+}
+
 void QDrawWidget::mouseMoveEvent(QMouseEvent* event) {
   const QPointF point = imagePosition(event->position());
+  if (!image_.isNull() && point.x() >= 0.0 && point.y() >= 0.0 &&
+      point.x() < static_cast<qreal>(image_.width()) &&
+      point.y() < static_cast<qreal>(image_.height())) {
+    emit cursorImagePositionChanged(point);
+  } else {
+    emit cursorLeftImage();
+  }
+
   if (dragController_.isActive()) {
     dragController_.update(point);
     viewport()->update();
@@ -584,7 +714,7 @@ QDrawWidget::makeOffsetClone(const ::quickshot::Shape& shape) const {
 }
 
 void QDrawWidget::pushCommand(std::unique_ptr<QUndoCommand> command) {
-  undoStack_.push(command.release());
+  undoStack().push(command.release());
 }
 
 // Commit a finished gesture as one undoable transaction, or discard an invalid creation.
@@ -647,7 +777,27 @@ void QDrawWidget::clearUndoHistoryForUntrackedEdit() {
   cancelDrag();
   // Image rotation changes both the bitmap and every shape's coordinate system;
   // keep it outside the shape-only undo timeline for now.
-  undoStack_.clear();
+  undoStack().clear();
+}
+
+void QDrawWidget::storeCurrentDocument() {
+  if (currentImageIndex_ < 0 || currentImageIndex_ >= imageCount()) {
+    return;
+  }
+
+  ImageDocument& document = *documents_[static_cast<std::size_t>(currentImageIndex_)];
+  document.image = image_;
+  document.shapes = std::move(shapes_);
+  document.selectedShape = selectedShape_;
+  selectedShape_ = nullptr;
+}
+
+const QImage& QDrawWidget::documentImage(qsizetype index) const {
+  Q_ASSERT(index >= 0 && index < imageCount());
+  if (index == currentImageIndex_) {
+    return image_;
+  }
+  return documents_[static_cast<std::size_t>(index)]->image;
 }
 
 void QDrawWidget::saveRois(const std::vector<const ::quickshot::Shape*>& targets) {
@@ -695,6 +845,82 @@ void QDrawWidget::saveRois(const std::vector<const ::quickshot::Shape*>& targets
   }
 }
 
+void QDrawWidget::batchSaveRois(const std::vector<const ::quickshot::Shape*>& targets) {
+  if (targets.empty() || imageCount() < 2) {
+    return;
+  }
+
+  std::vector<BatchSaveRow> rows;
+  rows.reserve(static_cast<std::size_t>(imageCount()));
+  for (qsizetype imageIndex = 0; imageIndex < imageCount(); ++imageIndex) {
+    const QImage& targetImage = documentImage(imageIndex);
+    const bool savable =
+        std::ranges::all_of(targets, [&targetImage](const ::quickshot::Shape* shape) {
+          return shape != nullptr && isRoiWithinImage(targetImage, *shape);
+        });
+    rows.push_back({.imagePath = imagePathAt(imageIndex),
+                    .savable = savable,
+                    .statusMessage = savable ? tr("All selected ROIs fit inside this image.")
+                                             : tr("One or more ROI bounds exceed this image.")});
+  }
+
+  BatchSaveDialog dialog{rows, lastSaveDirectory_, this};
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  lastSaveDirectory_ = QDir{dialog.outputDirectory()}.absolutePath();
+  QSettings{}.setValue(QStringLiteral("roi/lastSaveDirectory"), lastSaveDirectory_);
+
+  struct BatchOutput {
+    qsizetype imageIndex;
+    const ::quickshot::Shape* shape;
+    QString fileName;
+  };
+
+  std::vector<BatchOutput> outputs;
+  const QString timestamp =
+      QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz"));
+  std::size_t outputSequence = 0;
+  for (qsizetype imageIndex = 0; imageIndex < imageCount(); ++imageIndex) {
+    if (!rows[static_cast<std::size_t>(imageIndex)].savable) {
+      continue;
+    }
+
+    const QString stem = QFileInfo{imagePathAt(imageIndex)}.completeBaseName();
+    for (std::size_t shapeIndex = 0; shapeIndex < targets.size(); ++shapeIndex) {
+      ++outputSequence;
+      const QString suffix = QStringLiteral("_roi_%1_%2.png")
+                                 .arg(timestamp)
+                                 .arg(static_cast<qulonglong>(outputSequence), 3, 10, QChar{'0'});
+      outputs.push_back({.imageIndex = imageIndex,
+                         .shape = targets[shapeIndex],
+                         .fileName = QDir{lastSaveDirectory_}.filePath(stem + suffix)});
+    }
+  }
+
+  const bool outputExists = std::ranges::any_of(
+      outputs, [](const BatchOutput& output) { return QFileInfo::exists(output.fileName); });
+  if (outputExists &&
+      QMessageBox::question(this, tr("Overwrite ROI Files"),
+                            tr("One or more ROI files already exist. Overwrite them?")) !=
+          QMessageBox::Yes) {
+    return;
+  }
+
+  QStringList failures;
+  for (const BatchOutput& output : outputs) {
+    QString errorMessage;
+    if (!saveRoiPng(documentImage(output.imageIndex), *output.shape, output.fileName,
+                    &errorMessage)) {
+      failures.push_back(tr("%1: %2").arg(output.fileName, errorMessage));
+    }
+  }
+  if (!failures.isEmpty()) {
+    QMessageBox::warning(this, tr("Some ROI Files Could Not Be Saved"), failures.join('\n'));
+  }
+}
+
 void QDrawWidget::rotateImage(qreal degrees) {
   if (image_.isNull()) {
     return;
@@ -712,6 +938,7 @@ void QDrawWidget::rotateImage(qreal degrees) {
   }
   updateScrollBars();
   viewport()->update();
+  emit imageThumbnailChanged(currentImageIndex_);
 }
 
 QSize QDrawWidget::scaledImageSize() const {

@@ -12,6 +12,14 @@
 
 namespace quickshot {
 
+bool isRoiWithinImage(const QImage& image, const Shape& shape) {
+  if (image.isNull()) {
+    return false;
+  }
+  const QRect pixelBounds = shape.path().boundingRect().toAlignedRect();
+  return !pixelBounds.isEmpty() && image.rect().contains(pixelBounds);
+}
+
 QImage extractRoi(const QImage& image, const Shape& shape) {
   const QRect pixelBounds = shape.path().boundingRect().toAlignedRect().intersected(image.rect());
   if (image.isNull() || pixelBounds.isEmpty()) {

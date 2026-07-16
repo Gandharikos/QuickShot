@@ -6,7 +6,10 @@
 #include <QImage>
 #include <QPointF>
 #include <QRectF>
+#include <QSize>
 #include <QString>
+#include <QStringList>
+#include <QUndoGroup>
 #include <QUndoStack>
 #include <cstdint>
 #include <memory>
@@ -15,6 +18,7 @@
 
 class QContextMenuEvent;
 class QAction;
+class QEvent;
 class QMouseEvent;
 class QPainter;
 class QPaintEvent;
@@ -36,13 +40,21 @@ public:
   ~QDrawWidget() override;
 
   [[nodiscard]] bool loadImage(const QString& fileName);
+  [[nodiscard]] QStringList loadImages(const QStringList& fileNames);
   [[nodiscard]] bool hasImage() const noexcept;
+  [[nodiscard]] qsizetype imageCount() const noexcept;
+  [[nodiscard]] qsizetype currentImageIndex() const noexcept;
+  [[nodiscard]] QString imagePathAt(qsizetype index) const;
+  [[nodiscard]] QImage thumbnailAt(qsizetype index, const QSize& size) const;
   [[nodiscard]] qreal zoomFactor() const noexcept;
   [[nodiscard]] QSize sizeHint() const override;
   [[nodiscard]] qsizetype shapeCount() const noexcept;
   [[nodiscard]] const ::quickshot::Shape* shapeAt(qsizetype index) const;
   [[nodiscard]] QUndoStack& undoStack() noexcept;
   [[nodiscard]] const QUndoStack& undoStack() const noexcept;
+  [[nodiscard]] QUndoGroup& undoGroup() noexcept;
+  [[nodiscard]] const QUndoGroup& undoGroup() const noexcept;
+  void setCurrentImageIndex(qsizetype index);
   void setZoomFactor(qreal factor);
   void setCreationMode(ShapeType type, bool enabled);
   void rotateLeft();
@@ -51,9 +63,15 @@ public:
 signals:
   void imageAvailabilityChanged(bool available);
   void zoomFactorChanged(qreal factor);
+  void imageCollectionChanged();
+  void currentImageChanged(qsizetype index);
+  void imageThumbnailChanged(qsizetype index);
+  void cursorImagePositionChanged(const QPointF& position);
+  void cursorLeftImage();
 
 protected:
   void contextMenuEvent(QContextMenuEvent* event) override;
+  void leaveEvent(QEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
@@ -64,6 +82,8 @@ protected:
 private:
   friend class ShapeCommand;
 
+  class ImageDocument;
+
   [[nodiscard]] QPointF imagePosition(const QPointF& viewportPosition) const;
   [[nodiscard]] QRectF imageBounds() const;
   [[nodiscard]] ::quickshot::Shape* shapeAt(const QPointF& point) const;
@@ -72,9 +92,11 @@ private:
   [[nodiscard]] QRectF constrainedMove(const QRectF& bounds, const QPointF& offset) const;
   void initializeContextActions();
   void saveSelectedRoi();
+  void batchSaveSelectedRoi();
   void cloneSelectedShape();
   void deleteSelectedShape();
   void saveAllRois();
+  void batchSaveAllRois();
   void deleteAllShapes();
   void updateHoverCursor(const QPointF& point);
   void drawSelectionHandles(QPainter& painter) const;
@@ -84,7 +106,10 @@ private:
   void completeDrag(DragCompletion completion);
   void cancelDrag();
   void clearUndoHistoryForUntrackedEdit();
+  void storeCurrentDocument();
+  [[nodiscard]] const QImage& documentImage(qsizetype index) const;
   void saveRois(const std::vector<const ::quickshot::Shape*>& targets);
+  void batchSaveRois(const std::vector<const ::quickshot::Shape*>& targets);
   void rotateImage(qreal degrees);
   [[nodiscard]] QSize scaledImageSize() const;
   void updateScrollBars();
@@ -92,13 +117,18 @@ private:
   QImage image_;
   std::vector<std::unique_ptr<::quickshot::Shape>> shapes_;
   ::quickshot::Shape* selectedShape_ = nullptr;
+  std::vector<std::unique_ptr<ImageDocument>> documents_;
+  qsizetype currentImageIndex_ = -1;
   std::optional<ShapeType> creationType_;
   DragController dragController_;
-  QUndoStack undoStack_;
+  QUndoGroup undoGroup_;
+  QUndoStack fallbackUndoStack_;
   QAction* saveRoiAction_ = nullptr;
+  QAction* batchSaveRoiAction_ = nullptr;
   QAction* cloneShapeAction_ = nullptr;
   QAction* deleteShapeAction_ = nullptr;
   QAction* saveAllRoisAction_ = nullptr;
+  QAction* batchSaveAllRoisAction_ = nullptr;
   QAction* deleteAllShapesAction_ = nullptr;
   QString lastSaveDirectory_;
   qreal zoomFactor_ = 1.0;

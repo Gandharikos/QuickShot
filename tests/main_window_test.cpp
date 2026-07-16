@@ -10,19 +10,26 @@
 #include <QColor>
 #include <QContextMenuEvent>
 #include <QCoreApplication>
+#include <QDialog>
 #include <QDir>
+#include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
 #include <QKeySequence>
+#include <QLabel>
+#include <QLineEdit>
 #include <QLineF>
+#include <QListWidget>
 #include <QMenu>
 #include <QPointF>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QSettings>
+#include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
@@ -110,7 +117,8 @@ bool triggerContextMenuAction(quickshot::QDrawWidget& drawWidget, const QPoint& 
     }
 
     actionFound = true;
-    QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, menu->actionGeometry(action).center());
+    action->trigger();
+    menu->close();
   });
 
   QContextMenuEvent event{QContextMenuEvent::Mouse, position,
@@ -118,6 +126,70 @@ bool triggerContextMenuAction(quickshot::QDrawWidget& drawWidget, const QPoint& 
   QCoreApplication::sendEvent(drawWidget.viewport(), &event);
   QCoreApplication::processEvents();
   return actionFound;
+}
+
+struct BatchDialogSnapshot {
+  bool actionFound = false;
+  bool dialogFound = false;
+  QStringList imageCells;
+  QStringList statuses;
+};
+
+BatchDialogSnapshot inspectBatchContextAction(quickshot::QDrawWidget& drawWidget,
+                                              const QPoint& position, const char* actionName,
+                                              const QString& outputDirectory = {}) {
+  BatchDialogSnapshot snapshot;
+  QTimer::singleShot(0, [&snapshot, actionName, outputDirectory]() {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (menu == nullptr) {
+      return;
+    }
+
+    QAction* action = nullptr;
+    for (QAction* candidate : menu->actions()) {
+      if (candidate->objectName() == QLatin1String{actionName}) {
+        action = candidate;
+        break;
+      }
+    }
+    if (action == nullptr || !action->isEnabled()) {
+      menu->close();
+      return;
+    }
+
+    snapshot.actionFound = true;
+    QTimer::singleShot(0, [&snapshot, outputDirectory]() {
+      auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+      if (dialog == nullptr || dialog->objectName() != QLatin1String{"batchSaveDialog"}) {
+        return;
+      }
+      snapshot.dialogFound = true;
+      auto* table = dialog->findChild<QTableWidget*>("batchSaveTable");
+      if (table != nullptr) {
+        for (int row = 0; row < table->rowCount(); ++row) {
+          snapshot.imageCells.push_back(table->item(row, 0)->text());
+          snapshot.statuses.push_back(table->item(row, 1)->text());
+        }
+      }
+      if (outputDirectory.isEmpty()) {
+        dialog->reject();
+        return;
+      }
+      auto* outputEdit = dialog->findChild<QLineEdit*>("batchOutputDirectoryEdit");
+      if (outputEdit != nullptr) {
+        outputEdit->setText(outputDirectory);
+      }
+      dialog->accept();
+    });
+    action->trigger();
+    menu->close();
+  });
+
+  QContextMenuEvent event{QContextMenuEvent::Mouse, position,
+                          drawWidget.viewport()->mapToGlobal(position)};
+  QCoreApplication::sendEvent(drawWidget.viewport(), &event);
+  QCoreApplication::processEvents();
+  return snapshot;
 }
 
 } // namespace
@@ -131,11 +203,14 @@ private slots:
   void providesImageControls();
   void remembersLastOpenDirectory();
   void synchronizesToolbarZoomControl();
+  void showsImageCoordinatesInStatusBar();
   void enablesAndRunsRotationActions();
   void undoesAndRedoesDragOperations();
   void createsMovesAndResizesShapes();
   void createsCirclesAndPolygons();
   void createsBezierCurves();
+  void switchesIndependentImageDocuments();
+  void batchSaveUsesOnlyCurrentImageShapes();
   void hidesInactiveHandlesWhileResizing();
   void contextMenusCloneAndDeleteShapes();
   void resizesAndRotatesFromShapeHandles();
@@ -172,6 +247,7 @@ void MainWindowTest::providesImageControls() {
   const auto* circleAction = window.findChild<QAction*>("circleAction");
   const auto* polygonAction = window.findChild<QAction*>("polygonAction");
   const auto* bezierCurveAction = window.findChild<QAction*>("bezierCurveAction");
+  const auto* coordinateLabel = window.findChild<QLabel*>("coordinateLabel");
   const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
 
   QVERIFY(openButton != nullptr);
@@ -189,6 +265,8 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(circleAction != nullptr);
   QVERIFY(polygonAction != nullptr);
   QVERIFY(bezierCurveAction != nullptr);
+  QVERIFY(coordinateLabel != nullptr);
+  QCOMPARE(coordinateLabel->text(), QStringLiteral("X: —  Y: —"));
   QVERIFY(zoomFactorSpinBox != nullptr);
   QCOMPARE(rotateLeftAction->text(), QStringLiteral("Rotate Left"));
   QCOMPARE(rotateRightAction->text(), QStringLiteral("Rotate Right"));
@@ -339,6 +417,42 @@ void MainWindowTest::synchronizesToolbarZoomControl() {
   QVERIFY(drawWidget->loadImage(imagePath));
   QCOMPARE(drawWidget->zoomFactor(), 1.0);
   QCOMPARE(zoomFactorSpinBox->value(), 1.0);
+}
+
+void MainWindowTest::showsImageCoordinatesInStatusBar() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({400, 300}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("coordinates.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::MainWindow window;
+  window.resize(220, 200);
+  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* coordinateLabel = window.findChild<QLabel*>("coordinateLabel");
+  QVERIFY(drawWidget != nullptr);
+  QVERIFY(coordinateLabel != nullptr);
+  QCOMPARE(coordinateLabel->text(), QStringLiteral("X: —  Y: —"));
+
+  window.show();
+  QCoreApplication::processEvents();
+  QVERIFY(drawWidget->loadImage(imagePath));
+  drawWidget->setZoomFactor(2.0);
+  drawWidget->horizontalScrollBar()->setValue(80);
+  drawWidget->verticalScrollBar()->setValue(40);
+
+  QTest::mouseMove(drawWidget->viewport(), {20, 20});
+  QCoreApplication::processEvents();
+  QCOMPARE(coordinateLabel->text(), QStringLiteral("X: 50  Y: 30"));
+
+  drawWidget->setZoomFactor(1.0);
+  window.resize(720, 420);
+  QCoreApplication::processEvents();
+  QTest::mouseMove(drawWidget->viewport(), {600, 200});
+  QCoreApplication::processEvents();
+  QCOMPARE(coordinateLabel->text(), QStringLiteral("X: —  Y: —"));
 }
 
 void MainWindowTest::enablesAndRunsRotationActions() {
@@ -618,6 +732,141 @@ void MainWindowTest::createsBezierCurves() {
   QCOMPARE(drawWidget.shapeCount(), qsizetype{0});
   drawWidget.undoStack().redo();
   QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+}
+
+void MainWindowTest::switchesIndependentImageDocuments() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage firstImage({160, 120}, QImage::Format_RGB32);
+  firstImage.fill(Qt::black);
+  QImage secondImage({180, 140}, QImage::Format_RGB32);
+  secondImage.fill(Qt::blue);
+  const QString firstPath = temporaryDirectory.filePath("first.png");
+  const QString secondPath = temporaryDirectory.filePath("second.png");
+  QVERIFY(firstImage.save(firstPath));
+  QVERIFY(secondImage.save(secondPath));
+
+  quickshot::MainWindow window;
+  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* imageDock = window.findChild<QDockWidget*>("imageDockWidget");
+  auto* imageList = window.findChild<QListWidget*>("imageListView");
+  QVERIFY(drawWidget != nullptr);
+  QVERIFY(imageDock != nullptr);
+  QVERIFY(imageList != nullptr);
+  window.show();
+  QCoreApplication::processEvents();
+
+  QVERIFY(drawWidget->loadImages({firstPath, secondPath}).isEmpty());
+  QCoreApplication::processEvents();
+  QCOMPARE(drawWidget->imageCount(), qsizetype{2});
+  QCOMPARE(drawWidget->currentImageIndex(), qsizetype{0});
+  QCOMPARE(imageList->count(), 2);
+  QVERIFY(!imageList->item(0)->icon().isNull());
+  QVERIFY(!imageList->item(1)->icon().isNull());
+  QVERIFY(!imageDock->isHidden());
+  QVERIFY(imageList->styleSheet().contains(QStringLiteral("border")));
+
+  drawWidget->setCreationMode(quickshot::ShapeType::Rectangle, true);
+  drag(drawWidget->viewport(), {20, 20}, {80, 70});
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget->undoStack().count(), 1);
+
+  imageList->setCurrentRow(1);
+  QCoreApplication::processEvents();
+  QCOMPARE(drawWidget->currentImageIndex(), qsizetype{1});
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
+  QCOMPARE(drawWidget->undoStack().count(), 0);
+  drag(drawWidget->viewport(), {90, 30}, {150, 100});
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget->undoStack().count(), 1);
+
+  imageList->setCurrentRow(0);
+  QCoreApplication::processEvents();
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{1});
+  QCOMPARE(drawWidget->shapeAt(0)->boundingRect(), QRectF(20.0, 20.0, 60.0, 50.0));
+  QCOMPARE(drawWidget->undoStack().count(), 1);
+  drawWidget->undoStack().undo();
+  QCOMPARE(drawWidget->shapeCount(), qsizetype{0});
+
+  QVERIFY(drawWidget->loadImage(firstPath));
+  QCoreApplication::processEvents();
+  QCOMPARE(imageList->count(), 1);
+  QVERIFY(imageDock->isHidden());
+}
+
+void MainWindowTest::batchSaveUsesOnlyCurrentImageShapes() {
+  constexpr auto settingsKey = "roi/lastSaveDirectory";
+  QSettings settings;
+  const bool hadPreviousValue = settings.contains(QString::fromLatin1(settingsKey));
+  const QVariant previousValue = settings.value(QString::fromLatin1(settingsKey));
+
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+  const QString outputDirectory = temporaryDirectory.filePath("output");
+  QVERIFY(QDir{}.mkpath(outputDirectory));
+
+  QImage currentImage({100, 100}, QImage::Format_RGB32);
+  currentImage.fill(Qt::red);
+  QImage largeImage({200, 200}, QImage::Format_RGB32);
+  largeImage.fill(Qt::green);
+  QImage smallImage({50, 50}, QImage::Format_RGB32);
+  smallImage.fill(Qt::blue);
+  const QString currentPath = temporaryDirectory.filePath("current.png");
+  const QString largePath = temporaryDirectory.filePath("large.png");
+  const QString smallPath = temporaryDirectory.filePath("small.png");
+  QVERIFY(currentImage.save(currentPath));
+  QVERIFY(largeImage.save(largePath));
+  QVERIFY(smallImage.save(smallPath));
+
+  quickshot::QDrawWidget drawWidget;
+  drawWidget.resize(220, 180);
+  QVERIFY(drawWidget.loadImages({currentPath, largePath, smallPath}).isEmpty());
+  drawWidget.show();
+  QCoreApplication::processEvents();
+  drawWidget.setCreationMode(quickshot::ShapeType::Rectangle, true);
+  drag(drawWidget.viewport(), {10, 10}, {80, 80});
+
+  drawWidget.setCurrentImageIndex(1);
+  drag(drawWidget.viewport(), {150, 150}, {190, 190});
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+  drawWidget.setCurrentImageIndex(0);
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{1});
+
+  const BatchDialogSnapshot selectedSnapshot =
+      inspectBatchContextAction(drawWidget, {20, 20}, "batchSaveRoiAction");
+  QVERIFY(selectedSnapshot.actionFound);
+  QVERIFY(selectedSnapshot.dialogFound);
+  QCOMPARE(selectedSnapshot.statuses,
+           QStringList({QStringLiteral("✓"), QStringLiteral("✓"), QStringLiteral("✗")}));
+  QVERIFY(selectedSnapshot.imageCells.at(0).contains(currentPath));
+  QVERIFY(selectedSnapshot.imageCells.at(1).contains(largePath));
+  QVERIFY(selectedSnapshot.imageCells.at(2).contains(smallPath));
+
+  drag(drawWidget.viewport(), {5, 85}, {30, 98});
+  QCOMPARE(drawWidget.shapeCount(), qsizetype{2});
+  const BatchDialogSnapshot allSnapshot =
+      inspectBatchContextAction(drawWidget, {95, 5}, "batchSaveAllRoisAction", outputDirectory);
+  QVERIFY(allSnapshot.actionFound);
+  QVERIFY(allSnapshot.dialogFound);
+  QCOMPARE(allSnapshot.statuses,
+           QStringList({QStringLiteral("✓"), QStringLiteral("✓"), QStringLiteral("✗")}));
+
+  const QStringList outputFiles =
+      QDir{outputDirectory}.entryList({QStringLiteral("*.png")}, QDir::Files, QDir::Name);
+  QCOMPARE(outputFiles.size(), 4);
+  const QRegularExpression outputPattern{
+      QStringLiteral("^(current|large)_roi_\\d{8}_\\d{6}_\\d{3}_00[1-4]\\.png$")};
+  for (const QString& outputFile : outputFiles) {
+    QVERIFY2(outputPattern.match(outputFile).hasMatch(), qPrintable(outputFile));
+  }
+
+  if (hadPreviousValue) {
+    settings.setValue(QString::fromLatin1(settingsKey), previousValue);
+  } else {
+    settings.remove(QString::fromLatin1(settingsKey));
+  }
+  settings.sync();
 }
 
 void MainWindowTest::hidesInactiveHandlesWhileResizing() {

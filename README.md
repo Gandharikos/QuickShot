@@ -26,11 +26,12 @@ development shell automatically and installs the configured Git hooks.
 
 ## Image controls
 
-Use **Open** to load an image. The rotate-left and rotate-right actions become available after an
-image loads successfully. Hold **Ctrl** and use the mouse wheel to zoom from the image's top-left
-corner, or edit the toolbar factor with its arrows or mouse wheel. The zoom range is 10% to 800%.
-A normal mouse wheel over the image continues to scroll it. Open and ROI save dialogs remember
-their most recently used directories independently.
+Use **Open** to load one or more images. A thumbnail sidebar appears when multiple images are open;
+each image keeps its own shapes, selection, and undo history. The rotate-left and rotate-right
+actions become available after an image loads successfully. Hold **Ctrl** and use the mouse wheel
+to zoom from the image's top-left corner, or edit the toolbar factor with its arrows or mouse wheel.
+The zoom range is 10% to 800%. A normal mouse wheel over the image continues to scroll it. Open and
+ROI save dialogs remember their most recently used directories independently.
 
 Use **Rectangle**, **Ellipse**, **Circle**, **Polygon**, or **Bezier Curve** to draw image-coordinate
 ROIs. Polygon and Bezier Curve connect left-clicked anchors automatically; right-click finishes and
@@ -42,7 +43,11 @@ Left-drag any handle to resize, or right-drag any handle to rotate around the sh
 Right-click a shape to save, clone, or delete it. Right-click outside all shapes to save or delete
 all ROIs. Use the toolbar actions or **Ctrl+Z** and **Ctrl+Shift+Z** to undo and redo shape creation,
 movement, resizing, rotation, cloning, and deletion. Rotating the source image starts a new shape
-history. Saved files use PNG; pixels outside non-rectangular shapes are transparent.
+history. **Batch Save** applies the clicked shape from the current image to every open image;
+**Batch Save All** applies only the current image's shapes. Shapes belonging to other images never
+participate. The batch table marks an image invalid when any requested ROI extends beyond its
+bounds, and valid PNG names include one operation timestamp plus a sequence number. Pixels outside
+non-rectangular shapes are transparent.
 
 ## Nix outputs
 
