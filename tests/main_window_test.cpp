@@ -1227,6 +1227,11 @@ void MainWindowTest::rejectsNonImageFiles() {
   QVERIFY(!drawWidget.hasImage());
 }
 
-QTEST_MAIN(MainWindowTest)
+int main(int argc, char* argv[]) {
+  QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+  QApplication application{argc, argv};
+  MainWindowTest test;
+  return QTest::qExec(&test, argc, argv);
+}
 
 #include "main_window_test.moc"
