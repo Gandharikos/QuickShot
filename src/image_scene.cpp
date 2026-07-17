@@ -8,13 +8,12 @@
 #include <QUndoStack>
 #include <algorithm>
 #include <array>
-#include <ranges>
 #include <utility>
 
 namespace quickshot {
 class ImageItem final : public QGraphicsItem {
 public:
-  explicit ImageItem(const QImage& image) : image_(image) {
+  explicit ImageItem(QImage image) : image_(std::move(image)) {
     setAcceptedMouseButtons(Qt::NoButton);
     setZValue(-1.0);
   }

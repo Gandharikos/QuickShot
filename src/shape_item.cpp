@@ -15,7 +15,6 @@
 #include <QStyleOptionGraphicsItem>
 #include <QSvgRenderer>
 #include <QtMath>
-#include <algorithm>
 #include <cmath>
 #include <utility>
 

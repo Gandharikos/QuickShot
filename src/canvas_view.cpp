@@ -24,7 +24,6 @@
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
-#include <ranges>
 #include <utility>
 
 namespace quickshot {
