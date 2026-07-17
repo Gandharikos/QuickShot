@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "quickshot";
-  version = "1.0.0";
+  version = "2.0.0";
 
   src = lib.fileset.toSource {
     root = ../.;
@@ -39,7 +39,7 @@ stdenv.mkDerivation (finalAttrs: {
   doCheck = true;
 
   meta = {
-    description = "A minimal Qt 6 application template";
+    description = "A C++20 and Qt 6 image ROI editor";
     mainProgram = "quickshot";
     platforms = lib.platforms.unix;
   };

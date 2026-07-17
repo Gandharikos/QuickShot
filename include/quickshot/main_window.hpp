@@ -4,7 +4,7 @@
 
 namespace quickshot {
 
-class QDrawWidget;
+class CanvasView;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -15,7 +15,7 @@ public:
 private:
   void openImage();
 
-  QDrawWidget* drawWidget_;
+  CanvasView* canvasView_;
 };
 
 } // namespace quickshot

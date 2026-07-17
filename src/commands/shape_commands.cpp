@@ -1,200 +1,122 @@
 #include "quickshot/commands/shape_commands.hpp"
 
-#include "quickshot/qdrawwidget.hpp"
+#include "quickshot/image_scene.hpp"
 
 #include <QCoreApplication>
-#include <algorithm>
-#include <iterator>
-#include <ranges>
 #include <utility>
 
 namespace quickshot {
 
-ShapeCommand::ShapeCommand(QDrawWidget& drawWidget, const QString& text)
-    : QUndoCommand(text), drawWidget_(drawWidget) {}
+ShapeCommand::ShapeCommand(ImageScene& scene, const QString& text)
+    : QUndoCommand(text), scene_(scene) {}
 
-std::unique_ptr<Shape> ShapeCommand::makeOffsetClone(const Shape& shape) const {
-  return drawWidget_.makeOffsetClone(shape);
-}
-
-std::optional<std::size_t> ShapeCommand::indexOf(const Shape& shape) const {
-  const auto position =
-      std::ranges::find_if(drawWidget_.shapes_, [&shape](const std::unique_ptr<Shape>& candidate) {
-        return candidate.get() == &shape;
-      });
-  if (position == drawWidget_.shapes_.end()) {
-    return std::nullopt;
+void ShapeCommand::select(ShapeItem* item) {
+  scene_.clearSelection();
+  if (item != nullptr && item->scene() == &scene_) {
+    item->setSelected(true);
   }
-
-  return static_cast<std::size_t>(std::distance(drawWidget_.shapes_.begin(), position));
 }
 
-std::size_t ShapeCommand::shapeCount() const noexcept { return drawWidget_.shapes_.size(); }
+std::unique_ptr<ShapeItem> ShapeCommand::take(ShapeItem& item) {
+  scene_.cancelCreation();
+  return scene_.takeShapeItem(item);
+}
 
-std::unique_ptr<Shape> ShapeCommand::takeShape(std::size_t index) {
-  drawWidget_.cancelDrag();
-  if (index >= drawWidget_.shapes_.size()) {
-    return nullptr;
+void ShapeCommand::restore(std::unique_ptr<ShapeItem>& item) {
+  scene_.cancelCreation();
+  if (item == nullptr) {
+    return;
   }
-
-  const auto position = std::next(drawWidget_.shapes_.begin(), static_cast<std::ptrdiff_t>(index));
-  std::unique_ptr<Shape> shape = std::move(*position);
-  if (drawWidget_.selectedShape_ == shape.get()) {
-    drawWidget_.selectedShape_ = nullptr;
-  }
-  drawWidget_.shapes_.erase(position);
-  return shape;
+  ShapeItem* restored = item.release();
+  scene_.addShapeItem(*restored);
 }
 
-void ShapeCommand::insertShape(std::size_t index, std::unique_ptr<Shape> shape) {
-  drawWidget_.cancelDrag();
-  const auto position = std::next(drawWidget_.shapes_.begin(), static_cast<std::ptrdiff_t>(index));
-  drawWidget_.shapes_.insert(position, std::move(shape));
-}
-
-std::vector<std::unique_ptr<Shape>> ShapeCommand::takeAllShapes() {
-  drawWidget_.cancelDrag();
-  drawWidget_.selectedShape_ = nullptr;
-  return std::exchange(drawWidget_.shapes_, {});
-}
-
-void ShapeCommand::restoreShapes(std::vector<std::unique_ptr<Shape>> shapes) {
-  drawWidget_.cancelDrag();
-  drawWidget_.shapes_ = std::move(shapes);
-}
-
-Shape* ShapeCommand::selectedShape() const noexcept { return drawWidget_.selectedShape_; }
-
-void ShapeCommand::setSelectedShape(Shape* shape) noexcept { drawWidget_.selectedShape_ = shape; }
-
-void ShapeCommand::applyGeometry(Shape& shape, const ShapeGeometry& geometry) {
-  drawWidget_.cancelDrag();
-  shape.restoreGeometry(geometry);
-}
-
-void ShapeCommand::updateViewport() { drawWidget_.viewport()->update(); }
-
-CloneShapeCommand::CloneShapeCommand(QDrawWidget& drawWidget, const Shape& source)
-    : ShapeCommand(drawWidget, QCoreApplication::translate("CloneShapeCommand", "Clone Shape")),
-      clone_(makeOffsetClone(source)), previousSelection_(selectedShape()),
-      insertionIndex_(shapeCount()) {
-  setObsolete(clone_ == nullptr);
+CloneShapeCommand::CloneShapeCommand(ImageScene& scene, const ShapeItem& source)
+    : ShapeCommand(scene, QCoreApplication::translate("CloneShapeCommand", "Clone Shape")),
+      detached_(scene.makeOffsetClone(source)), item_(detached_.get()),
+      previousSelection_(scene.selectedShapeItem()) {
+  setObsolete(detached_ == nullptr);
 }
 
 void CloneShapeCommand::undo() {
-  clone_ = takeShape(insertionIndex_);
-  setSelectedShape(previousSelection_);
-  updateViewport();
+  if (item_ != nullptr) {
+    detached_ = take(*item_);
+    select(previousSelection_);
+  }
 }
 
 void CloneShapeCommand::redo() {
-  if (clone_ == nullptr) {
-    return;
-  }
-
-  Shape* clone = clone_.get();
-  insertShape(insertionIndex_, std::move(clone_));
-  setSelectedShape(clone);
-  updateViewport();
+  restore(detached_);
+  select(item_);
 }
 
-CreateShapeCommand::CreateShapeCommand(QDrawWidget& drawWidget, std::unique_ptr<Shape> shape,
-                                       std::size_t insertionIndex, Shape* previousSelection)
-    : ShapeCommand(drawWidget, QCoreApplication::translate("CreateShapeCommand", "Create Shape")),
-      shape_(std::move(shape)), previousSelection_(previousSelection),
-      insertionIndex_(insertionIndex) {
-  setObsolete(shape_ == nullptr);
-}
+CreateShapeCommand::CreateShapeCommand(ImageScene& scene, ShapeItem& shape,
+                                       ShapeItem* previousSelection)
+    : ShapeCommand(scene, QCoreApplication::translate("CreateShapeCommand", "Create Shape")),
+      item_(&shape), previousSelection_(previousSelection) {}
 
 void CreateShapeCommand::undo() {
-  shape_ = takeShape(insertionIndex_);
-  setSelectedShape(previousSelection_);
-  updateViewport();
+  detached_ = take(*item_);
+  select(previousSelection_);
 }
 
 void CreateShapeCommand::redo() {
-  if (shape_ == nullptr) {
-    return;
+  if (firstRedo_) {
+    firstRedo_ = false;
+  } else {
+    restore(detached_);
   }
-
-  Shape* shape = shape_.get();
-  insertShape(insertionIndex_, std::move(shape_));
-  setSelectedShape(shape);
-  updateViewport();
+  select(item_);
 }
 
-TransformShapeCommand::TransformShapeCommand(QDrawWidget& drawWidget, Shape& shape,
-                                             std::unique_ptr<ShapeGeometry> before,
-                                             std::unique_ptr<ShapeGeometry> after,
+TransformShapeCommand::TransformShapeCommand(ImageScene& scene, ShapeItem& shape,
+                                             ShapeItemGeometry before, ShapeItemGeometry after,
                                              const QString& text)
-    : ShapeCommand(drawWidget, text), shape_(shape), before_(std::move(before)),
-      after_(std::move(after)) {
-  setObsolete(before_ == nullptr || after_ == nullptr || before_->equals(*after_));
-}
+    : ShapeCommand(scene, text), item_(shape), before_(std::move(before)),
+      after_(std::move(after)) {}
 
-void TransformShapeCommand::undo() {
-  if (before_ != nullptr) {
-    applyGeometry(shape_, *before_);
-  }
-  updateViewport();
-}
+void TransformShapeCommand::undo() { item_.restoreGeometry(before_); }
 
-void TransformShapeCommand::redo() {
-  if (after_ != nullptr) {
-    applyGeometry(shape_, *after_);
-  }
-  updateViewport();
-}
+void TransformShapeCommand::redo() { item_.restoreGeometry(after_); }
 
-DeleteShapeCommand::DeleteShapeCommand(QDrawWidget& drawWidget, const Shape& shape)
-    : ShapeCommand(drawWidget, QCoreApplication::translate("DeleteShapeCommand", "Delete Shape")),
-      previousSelection_(selectedShape()),
-      selectionAfterDeletion_(previousSelection_ == &shape ? nullptr : previousSelection_) {
-  const std::optional<std::size_t> index = indexOf(shape);
-  if (!index.has_value()) {
-    setObsolete(true);
-    return;
-  }
-
-  deletionIndex_ = index;
-}
+DeleteShapeCommand::DeleteShapeCommand(ImageScene& scene, ShapeItem& shape)
+    : ShapeCommand(scene, QCoreApplication::translate("DeleteShapeCommand", "Delete Shape")),
+      item_(&shape), previousSelection_(scene.selectedShapeItem()) {}
 
 void DeleteShapeCommand::undo() {
-  if (!deletionIndex_.has_value() || deletedShape_ == nullptr) {
-    return;
-  }
-
-  insertShape(*deletionIndex_, std::move(deletedShape_));
-  setSelectedShape(previousSelection_);
-  updateViewport();
+  restore(detached_);
+  select(previousSelection_);
 }
 
 void DeleteShapeCommand::redo() {
-  if (!deletionIndex_.has_value()) {
-    return;
-  }
-
-  deletedShape_ = takeShape(*deletionIndex_);
-  setSelectedShape(selectionAfterDeletion_);
-  updateViewport();
+  detached_ = take(*item_);
+  select(nullptr);
 }
 
-DeleteAllShapesCommand::DeleteAllShapesCommand(QDrawWidget& drawWidget)
-    : ShapeCommand(drawWidget,
+DeleteAllShapesCommand::DeleteAllShapesCommand(ImageScene& scene)
+    : ShapeCommand(scene,
                    QCoreApplication::translate("DeleteAllShapesCommand", "Delete All Shapes")),
-      previousSelection_(selectedShape()) {
-  setObsolete(shapeCount() == 0);
+      items_(scene.shapeItems()), previousSelection_(scene.selectedShapeItem()) {
+  setObsolete(items_.empty());
 }
 
 void DeleteAllShapesCommand::undo() {
-  restoreShapes(std::move(deletedShapes_));
-  setSelectedShape(previousSelection_);
-  updateViewport();
+  for (std::unique_ptr<ShapeItem>& item : detached_) {
+    restore(item);
+  }
+  detached_.clear();
+  select(previousSelection_);
 }
 
 void DeleteAllShapesCommand::redo() {
-  deletedShapes_ = takeAllShapes();
-  updateViewport();
+  detached_.clear();
+  detached_.reserve(items_.size());
+  for (ShapeItem* item : items_) {
+    if (item != nullptr && item->scene() == &scene_) {
+      detached_.push_back(take(*item));
+    }
+  }
+  select(nullptr);
 }
 
 } // namespace quickshot

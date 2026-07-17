@@ -13,15 +13,23 @@
 namespace quickshot {
 
 bool isRoiWithinImage(const QImage& image, const Shape& shape) {
+  return isRoiWithinImage(image, shape.path());
+}
+
+bool isRoiWithinImage(const QImage& image, const QPainterPath& path) {
   if (image.isNull()) {
     return false;
   }
-  const QRect pixelBounds = shape.path().boundingRect().toAlignedRect();
+  const QRect pixelBounds = path.boundingRect().toAlignedRect();
   return !pixelBounds.isEmpty() && image.rect().contains(pixelBounds);
 }
 
 QImage extractRoi(const QImage& image, const Shape& shape) {
-  const QRect pixelBounds = shape.path().boundingRect().toAlignedRect().intersected(image.rect());
+  return extractRoi(image, shape.path());
+}
+
+QImage extractRoi(const QImage& image, const QPainterPath& path) {
+  const QRect pixelBounds = path.boundingRect().toAlignedRect().intersected(image.rect());
   if (image.isNull() || pixelBounds.isEmpty()) {
     return {};
   }
@@ -35,7 +43,7 @@ QImage extractRoi(const QImage& image, const Shape& shape) {
 
   QPainter painter{&roi};
   painter.setRenderHint(QPainter::Antialiasing);
-  painter.setClipPath(toRoiCoordinates.map(shape.path()));
+  painter.setClipPath(toRoiCoordinates.map(path));
   painter.drawImage(
       QPointF{-static_cast<qreal>(pixelBounds.x()), -static_cast<qreal>(pixelBounds.y())}, image);
   return roi;
@@ -43,7 +51,12 @@ QImage extractRoi(const QImage& image, const Shape& shape) {
 
 bool saveRoiPng(const QImage& image, const Shape& shape, const QString& fileName,
                 QString* errorMessage) {
-  const QImage roi = extractRoi(image, shape);
+  return saveRoiPng(image, shape.path(), fileName, errorMessage);
+}
+
+bool saveRoiPng(const QImage& image, const QPainterPath& path, const QString& fileName,
+                QString* errorMessage) {
+  const QImage roi = extractRoi(image, path);
   if (roi.isNull()) {
     if (errorMessage != nullptr) {
       *errorMessage = QStringLiteral("The ROI is outside the image or has no area.");

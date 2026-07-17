@@ -1,6 +1,6 @@
 #include "quickshot/main_window.hpp"
 
-#include "quickshot/qdrawwidget.hpp"
+#include "quickshot/canvas_view.hpp"
 #include "quickshot/shapes/shape.hpp"
 
 #include <QAction>
@@ -76,7 +76,7 @@ QIcon svgIcon(const QString& resource) {
 
 } // namespace
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new QDrawWidget(this)) {
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new CanvasView(this)) {
   setWindowTitle(tr("Quickshot"));
   resize(720, 420);
 
@@ -87,13 +87,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   toolbar->setMovable(false);
   toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
   openButton->setObjectName("openButton");
-  drawWidget_->setObjectName("drawWidget");
+  canvasView_->setObjectName("canvasView");
 
   toolbar->addWidget(openButton);
   toolbar->addSeparator();
 
-  QAction* undoAction = drawWidget_->undoGroup().createUndoAction(this, tr("Undo"));
-  QAction* redoAction = drawWidget_->undoGroup().createRedoAction(this, tr("Redo"));
+  QAction* undoAction = canvasView_->undoGroup().createUndoAction(this, tr("Undo"));
+  QAction* redoAction = canvasView_->undoGroup().createRedoAction(this, tr("Redo"));
   undoAction->setObjectName("undoAction");
   redoAction->setObjectName("redoAction");
   undoAction->setIcon(
@@ -175,45 +175,45 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
   shapeActions->addAction(bezierCurveAction);
 
   connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
-  connect(rotateLeftAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateLeft);
-  connect(rotateRightAction, &QAction::triggered, drawWidget_, &QDrawWidget::rotateRight);
-  connect(zoomFactorSpinBox, &QDoubleSpinBox::valueChanged, drawWidget_,
-          &QDrawWidget::setZoomFactor);
-  connect(drawWidget_, &QDrawWidget::zoomFactorChanged, zoomFactorSpinBox,
+  connect(rotateLeftAction, &QAction::triggered, canvasView_, &CanvasView::rotateLeft);
+  connect(rotateRightAction, &QAction::triggered, canvasView_, &CanvasView::rotateRight);
+  connect(zoomFactorSpinBox, &QDoubleSpinBox::valueChanged, canvasView_,
+          &CanvasView::setZoomFactor);
+  connect(canvasView_, &CanvasView::zoomFactorChanged, zoomFactorSpinBox,
           &QDoubleSpinBox::setValue);
   connect(rectangleAction, &QAction::triggered, this,
-          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Rectangle, enabled); });
+          [this](bool enabled) { canvasView_->setCreationMode(ShapeType::Rectangle, enabled); });
   connect(ellipseAction, &QAction::triggered, this,
-          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Ellipse, enabled); });
+          [this](bool enabled) { canvasView_->setCreationMode(ShapeType::Ellipse, enabled); });
   connect(circleAction, &QAction::triggered, this,
-          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Circle, enabled); });
+          [this](bool enabled) { canvasView_->setCreationMode(ShapeType::Circle, enabled); });
   connect(polygonAction, &QAction::triggered, this,
-          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::Polygon, enabled); });
+          [this](bool enabled) { canvasView_->setCreationMode(ShapeType::Polygon, enabled); });
   connect(bezierCurveAction, &QAction::triggered, this,
-          [this](bool enabled) { drawWidget_->setCreationMode(ShapeType::BezierCurve, enabled); });
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateLeftAction,
+          [this](bool enabled) { canvasView_->setCreationMode(ShapeType::BezierCurve, enabled); });
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, rotateLeftAction,
           &QAction::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rotateRightAction,
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, rotateRightAction,
           &QAction::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, zoomFactorSpinBox,
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, zoomFactorSpinBox,
           &QDoubleSpinBox::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, rectangleAction,
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, rectangleAction,
           &QAction::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, ellipseAction, &QAction::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, circleAction, &QAction::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, polygonAction, &QAction::setEnabled);
-  connect(drawWidget_, &QDrawWidget::imageAvailabilityChanged, bezierCurveAction,
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, ellipseAction, &QAction::setEnabled);
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, circleAction, &QAction::setEnabled);
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, polygonAction, &QAction::setEnabled);
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, bezierCurveAction,
           &QAction::setEnabled);
 
   auto* coordinateLabel = new QLabel(tr("X: —  Y: —"), this);
   coordinateLabel->setObjectName("coordinateLabel");
   statusBar()->addPermanentWidget(coordinateLabel);
-  connect(drawWidget_, &QDrawWidget::cursorImagePositionChanged, coordinateLabel,
+  connect(canvasView_, &CanvasView::cursorImagePositionChanged, coordinateLabel,
           [coordinateLabel](const QPointF& position) {
             coordinateLabel->setText(
                 MainWindow::tr("X: %1  Y: %2").arg(qFloor(position.x())).arg(qFloor(position.y())));
           });
-  connect(drawWidget_, &QDrawWidget::cursorLeftImage, coordinateLabel,
+  connect(canvasView_, &CanvasView::cursorLeftImage, coordinateLabel,
           [coordinateLabel]() { coordinateLabel->setText(MainWindow::tr("X: —  Y: —")); });
 
   auto* imageDock = new QDockWidget(tr("Images"), this);
@@ -243,7 +243,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
     bool validIndex = false;
     const qsizetype index = deleteImageAction->data().toLongLong(&validIndex);
     if (validIndex) {
-      drawWidget_->removeImage(index);
+      canvasView_->removeImage(index);
     }
   });
   connect(imageList, &QListWidget::customContextMenuRequested, imageList,
@@ -259,38 +259,38 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), drawWidget_(new Q
             menu.exec(imageList->viewport()->mapToGlobal(position));
           });
 
-  connect(imageList, &QListWidget::currentRowChanged, drawWidget_,
-          &QDrawWidget::setCurrentImageIndex);
-  connect(drawWidget_, &QDrawWidget::currentImageChanged, imageList, [imageList](qsizetype index) {
+  connect(imageList, &QListWidget::currentRowChanged, canvasView_,
+          &CanvasView::setCurrentImageIndex);
+  connect(canvasView_, &CanvasView::currentImageChanged, imageList, [imageList](qsizetype index) {
     const QSignalBlocker blocker{imageList};
     imageList->setCurrentRow(static_cast<int>(index));
   });
-  connect(drawWidget_, &QDrawWidget::imageCollectionChanged, imageList,
+  connect(canvasView_, &CanvasView::imageCollectionChanged, imageList,
           [this, imageDock, imageList]() {
             const QSignalBlocker blocker{imageList};
             imageList->clear();
-            for (qsizetype index = 0; index < drawWidget_->imageCount(); ++index) {
-              const QString filePath = drawWidget_->imagePathAt(index);
+            for (qsizetype index = 0; index < canvasView_->imageCount(); ++index) {
+              const QString filePath = canvasView_->imagePathAt(index);
               auto* item = new QListWidgetItem{
-                  QIcon{QPixmap::fromImage(drawWidget_->thumbnailAt(index, thumbnailSize))},
+                  QIcon{QPixmap::fromImage(canvasView_->thumbnailAt(index, thumbnailSize))},
                   QFileInfo{filePath}.fileName(), imageList};
               item->setToolTip(filePath);
               item->setSizeHint({140, 120});
               item->setTextAlignment(Qt::AlignHCenter | Qt::AlignBottom);
             }
-            imageList->setCurrentRow(static_cast<int>(drawWidget_->currentImageIndex()));
-            imageDock->setVisible(drawWidget_->imageCount() > 1);
+            imageList->setCurrentRow(static_cast<int>(canvasView_->currentImageIndex()));
+            imageDock->setVisible(canvasView_->imageCount() > 1);
           });
-  connect(drawWidget_, &QDrawWidget::imageThumbnailChanged, imageList,
+  connect(canvasView_, &CanvasView::imageThumbnailChanged, imageList,
           [this, imageList](qsizetype index) {
             QListWidgetItem* item = imageList->item(static_cast<int>(index));
             if (item != nullptr) {
               item->setIcon(
-                  QIcon{QPixmap::fromImage(drawWidget_->thumbnailAt(index, thumbnailSize))});
+                  QIcon{QPixmap::fromImage(canvasView_->thumbnailAt(index, thumbnailSize))});
             }
           });
 
-  setCentralWidget(drawWidget_);
+  setCentralWidget(canvasView_);
 }
 
 void MainWindow::openImage() {
@@ -300,7 +300,7 @@ void MainWindow::openImage() {
     return;
   }
 
-  const QStringList rejectedFiles = drawWidget_->loadImages(fileNames);
+  const QStringList rejectedFiles = canvasView_->loadImages(fileNames);
   if (rejectedFiles.size() == fileNames.size()) {
     QMessageBox::warning(this, tr("Invalid Image"),
                          tr("None of the selected files is a supported image."));

@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
   quickshot
-  VERSION 1.0.0
-  DESCRIPTION "A minimal Qt 6 application template"
+  VERSION 2.0.0
+  DESCRIPTION "A modern Qt 6 image ROI editor"
   LANGUAGES CXX)
 
 include(CTest)
@@ -28,11 +28,13 @@ endif()
 add_library(
   quickshot_ui STATIC
   src/batch_save_dialog.cpp
+  src/canvas_view.cpp
   src/commands/shape_commands.cpp
-  src/drag_controller.cpp
+  src/image_document.cpp
+  src/image_scene.cpp
   src/main_window.cpp
-  src/qdrawwidget.cpp
   src/roi_exporter.cpp
+  src/shape_item.cpp
   src/shapes/bezier_curve.cpp
   src/shapes/box_shape.cpp
   src/shapes/circle.cpp
@@ -42,11 +44,13 @@ add_library(
   src/shapes/rectangle.cpp
   src/shapes/shape.cpp
   include/quickshot/batch_save_dialog.hpp
+  include/quickshot/canvas_view.hpp
   include/quickshot/commands/shape_commands.hpp
-  include/quickshot/drag_controller.hpp
+  include/quickshot/image_document.hpp
+  include/quickshot/image_scene.hpp
   include/quickshot/main_window.hpp
-  include/quickshot/qdrawwidget.hpp
   include/quickshot/roi_exporter.hpp
+  include/quickshot/shape_item.hpp
   include/quickshot/shapes/bezier_curve.hpp
   include/quickshot/shapes/box_shape.hpp
   include/quickshot/shapes/circle.hpp
@@ -116,8 +120,8 @@ endif()
 if(BUILD_TESTING)
   find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
-  qt_add_executable(drag_controller_tests tests/drag_controller_test.cpp)
-  target_link_libraries(drag_controller_tests PRIVATE quickshot_ui Qt6::Test)
+  qt_add_executable(graphics_scene_tests tests/graphics_scene_test.cpp)
+  target_link_libraries(graphics_scene_tests PRIVATE quickshot_ui Qt6::Test)
 
   qt_add_executable(quickshot_tests tests/main_window_test.cpp)
   target_link_libraries(quickshot_tests PRIVATE quickshot_ui Qt6::Test)
@@ -125,13 +129,13 @@ if(BUILD_TESTING)
   qt_add_executable(shape_tests tests/shape_test.cpp)
   target_link_libraries(shape_tests PRIVATE quickshot_ui Qt6::Test)
 
-  add_test(NAME drag_controller_tests COMMAND drag_controller_tests)
+  add_test(NAME graphics_scene_tests COMMAND graphics_scene_tests)
   # Persist the QTest report because Windows runners can lose its console
   # output.
   add_test(NAME quickshot_tests COMMAND quickshot_tests -o
                                         quickshot_tests.txt,txt)
   add_test(NAME shape_tests COMMAND shape_tests)
-  set_tests_properties(drag_controller_tests quickshot_tests shape_tests
+  set_tests_properties(graphics_scene_tests quickshot_tests shape_tests
                        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 

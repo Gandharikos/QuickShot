@@ -1,5 +1,5 @@
+#include "quickshot/canvas_view.hpp"
 #include "quickshot/main_window.hpp"
-#include "quickshot/qdrawwidget.hpp"
 #include "quickshot/shapes/bezier_curve.hpp"
 #include "quickshot/shapes/circle.hpp"
 #include "quickshot/shapes/polygon.hpp"
@@ -39,7 +39,7 @@
 
 namespace {
 
-void sendControlWheel(quickshot::QDrawWidget& drawWidget, int angleDelta,
+void sendControlWheel(quickshot::CanvasView& drawWidget, int angleDelta,
                       const QPointF& position = {30.0, 20.0}) {
   const QPoint globalPosition = drawWidget.viewport()->mapToGlobal(position.toPoint());
   QWheelEvent event{position,     globalPosition,      QPoint{},          QPoint{0, angleDelta},
@@ -64,7 +64,7 @@ void drag(QWidget* widget, const QPoint& start, const QPoint& end) {
   QCoreApplication::processEvents();
 }
 
-QImage renderViewport(const quickshot::QDrawWidget& drawWidget) {
+QImage renderViewport(const quickshot::CanvasView& drawWidget) {
   QImage renderedImage{drawWidget.viewport()->size(), QImage::Format_RGB32};
   renderedImage.fill(Qt::black);
   drawWidget.viewport()->render(&renderedImage);
@@ -96,7 +96,7 @@ bool hasColorNear(const QImage& image, const QPoint& point, const QColor& color)
   return false;
 }
 
-bool triggerContextMenuAction(quickshot::QDrawWidget& drawWidget, const QPoint& position,
+bool triggerContextMenuAction(quickshot::CanvasView& drawWidget, const QPoint& position,
                               const char* actionName) {
   bool actionFound = false;
   QTimer::singleShot(0, [&actionFound, actionName]() {
@@ -163,7 +163,7 @@ struct BatchDialogSnapshot {
   QStringList statuses;
 };
 
-BatchDialogSnapshot inspectBatchContextAction(quickshot::QDrawWidget& drawWidget,
+BatchDialogSnapshot inspectBatchContextAction(quickshot::CanvasView& drawWidget,
                                               const QPoint& position, const char* actionName,
                                               const QString& outputDirectory = {}) {
   BatchDialogSnapshot snapshot;
@@ -264,7 +264,7 @@ void MainWindowTest::hasUsefulDefaultSize() {
 void MainWindowTest::providesImageControls() {
   const quickshot::MainWindow window;
   const auto* openButton = window.findChild<QPushButton*>("openButton");
-  const auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  const auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   const auto* toolbar = window.findChild<QToolBar*>("mainToolBar");
   const auto* rotateLeftAction = window.findChild<QAction*>("rotateLeftAction");
   const auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
@@ -441,7 +441,7 @@ void MainWindowTest::synchronizesToolbarZoomControl() {
   QVERIFY(sourceImage.save(imagePath));
 
   quickshot::MainWindow window;
-  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
   QVERIFY(drawWidget != nullptr);
   QVERIFY(zoomFactorSpinBox != nullptr);
@@ -477,7 +477,7 @@ void MainWindowTest::showsImageCoordinatesInStatusBar() {
 
   quickshot::MainWindow window;
   window.resize(220, 200);
-  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   auto* coordinateLabel = window.findChild<QLabel*>("coordinateLabel");
   QVERIFY(drawWidget != nullptr);
   QVERIFY(coordinateLabel != nullptr);
@@ -512,7 +512,7 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QVERIFY(sourceImage.save(imagePath));
 
   quickshot::MainWindow window;
-  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   auto* rotateLeftAction = window.findChild<QAction*>("rotateLeftAction");
   auto* rotateRightAction = window.findChild<QAction*>("rotateRightAction");
   auto* rectangleAction = window.findChild<QAction*>("rectangleAction");
@@ -563,7 +563,7 @@ void MainWindowTest::undoesAndRedoesDragOperations() {
   QVERIFY(sourceImage.save(imagePath));
 
   quickshot::MainWindow window;
-  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   auto* undoAction = window.findChild<QAction*>("undoAction");
   auto* redoAction = window.findChild<QAction*>("redoAction");
   QVERIFY(drawWidget != nullptr);
@@ -637,7 +637,7 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   const QString imagePath = temporaryDirectory.filePath("shapes.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -683,7 +683,7 @@ void MainWindowTest::createsCirclesAndPolygons() {
   const QString imagePath = temporaryDirectory.filePath("circle-polygon.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -740,7 +740,7 @@ void MainWindowTest::createsBezierCurves() {
   const QString imagePath = temporaryDirectory.filePath("bezier-curve.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -799,7 +799,7 @@ void MainWindowTest::switchesIndependentImageDocuments() {
   QVERIFY(thirdImage.save(thirdPath));
 
   quickshot::MainWindow window;
-  auto* drawWidget = window.findChild<quickshot::QDrawWidget*>("drawWidget");
+  auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   auto* imageDock = window.findChild<QDockWidget*>("imageDockWidget");
   auto* imageList = window.findChild<QListWidget*>("imageListView");
   QVERIFY(drawWidget != nullptr);
@@ -894,7 +894,7 @@ void MainWindowTest::batchSaveUsesOnlyCurrentImageShapes() {
   QVERIFY(largeImage.save(largePath));
   QVERIFY(smallImage.save(smallPath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImages({currentPath, largePath, smallPath}).isEmpty());
   drawWidget.show();
@@ -953,7 +953,7 @@ void MainWindowTest::hidesInactiveHandlesWhileResizing() {
   const QString imagePath = temporaryDirectory.filePath("handles.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -988,7 +988,7 @@ void MainWindowTest::contextMenusCloneAndDeleteShapes() {
   const QString imagePath = temporaryDirectory.filePath("context-menu.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -1042,7 +1042,7 @@ void MainWindowTest::resizesAndRotatesFromShapeHandles() {
   const QString imagePath = temporaryDirectory.filePath("shape-rotation.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(220, 180);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -1086,7 +1086,7 @@ void MainWindowTest::createsShapesInImageCoordinates() {
   const QString imagePath = temporaryDirectory.filePath("coordinates.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(100, 80);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -1115,7 +1115,7 @@ void MainWindowTest::drawsImageAtOriginalSize() {
   const QString imagePath = temporaryDirectory.filePath("small.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(100, 100);
   QVERIFY(drawWidget.loadImage(imagePath));
   QVERIFY(drawWidget.hasImage());
@@ -1144,7 +1144,7 @@ void MainWindowTest::showsScrollBarsForLargeImage() {
   const QString imagePath = temporaryDirectory.filePath("large.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(100, 80);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -1167,7 +1167,7 @@ void MainWindowTest::zoomsFromImageTopLeft() {
   const QString imagePath = temporaryDirectory.filePath("zoom.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(120, 100);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -1202,7 +1202,7 @@ void MainWindowTest::clampsZoomAndResetsForNewImage() {
   const QString imagePath = temporaryDirectory.filePath("limits.png");
   QVERIFY(sourceImage.save(imagePath));
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   drawWidget.resize(100, 80);
   QVERIFY(drawWidget.loadImage(imagePath));
   drawWidget.show();
@@ -1231,7 +1231,7 @@ void MainWindowTest::rejectsNonImageFiles() {
   QCOMPARE(invalidImage.write("not an image"), qint64{12});
   invalidImage.close();
 
-  quickshot::QDrawWidget drawWidget;
+  quickshot::CanvasView drawWidget;
   QVERIFY(!drawWidget.loadImage(invalidImage.fileName()));
   QVERIFY(!drawWidget.hasImage());
 }

@@ -2,8 +2,12 @@
 
 [![Build and Release](https://github.com/Gandharikos/QuickShot/actions/workflows/build-release.yml/badge.svg)](https://github.com/Gandharikos/QuickShot/actions/workflows/build-release.yml)
 
-A small C++20 and Qt 6 Widgets project template with a reproducible Nix development and build
-environment.
+A C++20 and Qt 6 image ROI editor with a reproducible Nix development and build environment.
+
+Quickshot 2 uses Qt's Graphics View architecture: each image document owns an independent
+`QGraphicsScene` and undo stack, while the shared `QGraphicsView` displays the active document.
+Shapes are selectable and movable graphics items with screen-sized child handle items, leaving Qt
+to handle scene coordinates, hit testing, painting, and scrolling.
 
 ## Quick start
 
@@ -77,8 +81,8 @@ a GitHub Release containing the Linux `.tar.gz`, macOS `.dmg`, Windows `.zip`, a
 `SHA256SUMS.txt` files:
 
 ```console
-git tag v1.0.0
-git push origin v1.0.0
+git tag v2.0.0
+git push origin v2.0.0
 ```
 
 The macOS and Windows packages are currently unsigned, so their operating systems may show a

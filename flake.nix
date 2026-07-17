@@ -1,5 +1,5 @@
 {
-  description = "A batteries-included C++20 and Qt 6 project template";
+  description = "A C++20 and Qt 6 image ROI editor";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
