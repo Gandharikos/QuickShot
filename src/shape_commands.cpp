@@ -1,4 +1,4 @@
-#include "quickshot/commands/shape_commands.hpp"
+#include "quickshot/shape_commands.hpp"
 
 #include "quickshot/image_scene.hpp"
 

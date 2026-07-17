@@ -1,5 +1,5 @@
-#include "quickshot/commands/shape_commands.hpp"
 #include "quickshot/image_scene.hpp"
+#include "quickshot/shape_commands.hpp"
 #include "quickshot/shape_item.hpp"
 #include "quickshot/shapes/shape.hpp"
 

@@ -29,7 +29,7 @@ add_library(
   quickshot_ui STATIC
   src/batch_save_dialog.cpp
   src/canvas_view.cpp
-  src/commands/shape_commands.cpp
+  src/shape_commands.cpp
   src/image_document.cpp
   src/image_scene.cpp
   src/main_window.cpp
@@ -45,7 +45,7 @@ add_library(
   src/shapes/shape.cpp
   include/quickshot/batch_save_dialog.hpp
   include/quickshot/canvas_view.hpp
-  include/quickshot/commands/shape_commands.hpp
+  include/quickshot/shape_commands.hpp
   include/quickshot/image_document.hpp
   include/quickshot/image_scene.hpp
   include/quickshot/main_window.hpp

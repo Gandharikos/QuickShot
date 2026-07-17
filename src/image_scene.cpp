@@ -1,6 +1,6 @@
 #include "quickshot/image_scene.hpp"
 
-#include "quickshot/commands/shape_commands.hpp"
+#include "quickshot/shape_commands.hpp"
 
 #include <QGraphicsItem>
 #include <QGraphicsSceneMouseEvent>

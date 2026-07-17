@@ -1,10 +1,10 @@
 #include "quickshot/canvas_view.hpp"
 
 #include "quickshot/batch_save_dialog.hpp"
-#include "quickshot/commands/shape_commands.hpp"
 #include "quickshot/image_document.hpp"
 #include "quickshot/image_scene.hpp"
 #include "quickshot/roi_exporter.hpp"
+#include "quickshot/shape_commands.hpp"
 
 #include <QAction>
 #include <QContextMenuEvent>
