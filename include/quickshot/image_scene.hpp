@@ -48,6 +48,9 @@ public:
   [[nodiscard]] bool consumeContextMenuSuppression() noexcept;
   void applyImageTransform(const QTransform& transformation);
 
+signals:
+  void shapeCollectionChanged();
+
 protected:
   void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
   void mousePressEvent(QGraphicsSceneMouseEvent* event) override;

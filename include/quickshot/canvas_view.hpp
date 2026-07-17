@@ -43,6 +43,7 @@ public:
   [[nodiscard]] qreal zoomFactor() const noexcept;
   [[nodiscard]] QSize sizeHint() const override;
   [[nodiscard]] qsizetype shapeCount() const noexcept;
+  [[nodiscard]] qsizetype shapeCountAt(qsizetype imageIndex) const noexcept;
   [[nodiscard]] const ::quickshot::Shape* shapeAt(qsizetype index) const;
   [[nodiscard]] QUndoStack& undoStack() noexcept;
   [[nodiscard]] const QUndoStack& undoStack() const noexcept;
@@ -50,6 +51,9 @@ public:
   [[nodiscard]] const QUndoGroup& undoGroup() const noexcept;
   void setCurrentImageIndex(qsizetype index);
   void removeImage(qsizetype index);
+  void removeCurrentImage();
+  void clearImageShapes(qsizetype index);
+  void clearCurrentImageShapes();
   void setZoomFactor(qreal factor);
   void setCreationMode(ShapeType type, bool enabled);
   void rotateLeft();
@@ -59,6 +63,7 @@ signals:
   void imageAvailabilityChanged(bool available);
   void zoomFactorChanged(qreal factor);
   void imageCollectionChanged();
+  void currentShapeAvailabilityChanged(bool available);
   void currentImageChanged(qsizetype index);
   void imageThumbnailChanged(qsizetype index);
   void cursorImagePositionChanged(const QPointF& position);

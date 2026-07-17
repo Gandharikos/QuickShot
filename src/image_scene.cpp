@@ -153,6 +153,7 @@ std::unique_ptr<ShapeItem> ImageScene::makeOffsetClone(const ShapeItem& source) 
 void ImageScene::addShapeItem(ShapeItem& item) {
   addItem(&item);
   nextShapeZ_ = std::max(nextShapeZ_, item.zValue() + 1.0);
+  emit shapeCollectionChanged();
 }
 
 std::unique_ptr<ShapeItem> ImageScene::takeShapeItem(ShapeItem& item) {
@@ -160,6 +161,7 @@ std::unique_ptr<ShapeItem> ImageScene::takeShapeItem(ShapeItem& item) {
     return nullptr;
   }
   removeItem(&item);
+  emit shapeCollectionChanged();
   return std::unique_ptr<ShapeItem>{&item};
 }
 
@@ -270,6 +272,7 @@ void ImageScene::finishCreation(bool suppressContextMenu) {
     return;
   }
   pushCommand(std::make_unique<CreateShapeCommand>(*this, *completed, previousSelection_));
+  emit shapeCollectionChanged();
   previousSelection_ = nullptr;
 }
 

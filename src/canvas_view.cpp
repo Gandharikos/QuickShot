@@ -110,6 +110,13 @@ QStringList CanvasView::loadImages(const QStringList& fileNames) {
   const qsizetype firstNewIndex = imageCount();
   documents_.reserve(documents_.size() + loaded.size());
   for (std::unique_ptr<ImageDocument>& document : loaded) {
+    ImageDocument* loadedDocument = document.get();
+    connect(&loadedDocument->scene(), &ImageScene::shapeCollectionChanged, this,
+            [this, loadedDocument]() {
+              if (currentDocument() == loadedDocument) {
+                emit currentShapeAvailabilityChanged(shapeCount() > 0);
+              }
+            });
     undoGroup_.addStack(&document->undoStack());
     documents_.push_back(std::move(document));
   }
@@ -150,6 +157,12 @@ qsizetype CanvasView::shapeCount() const noexcept {
   return imageScene() == nullptr ? 0 : imageScene()->shapeCount();
 }
 
+qsizetype CanvasView::shapeCountAt(qsizetype imageIndex) const noexcept {
+  return imageIndex >= 0 && imageIndex < imageCount()
+             ? documents_[static_cast<std::size_t>(imageIndex)]->scene().shapeCount()
+             : 0;
+}
+
 const ::quickshot::Shape* CanvasView::shapeAt(qsizetype index) const {
   const ShapeItem* item = imageScene() == nullptr ? nullptr : imageScene()->shapeItemAt(index);
   return item == nullptr ? nullptr : &item->model();
@@ -188,6 +201,7 @@ void CanvasView::setCurrentImageIndex(qsizetype index) {
   verticalScrollBar()->setValue(0);
   emit cursorLeftImage();
   emit currentImageChanged(index);
+  emit currentShapeAvailabilityChanged(document.scene().shapeCount() > 0);
 }
 
 void CanvasView::removeImage(qsizetype index) {
@@ -211,6 +225,7 @@ void CanvasView::removeImage(qsizetype index) {
     emit currentImageChanged(-1);
     emit imageCollectionChanged();
     emit imageAvailabilityChanged(false);
+    emit currentShapeAvailabilityChanged(false);
     return;
   }
   if (removesCurrent) {
@@ -222,6 +237,22 @@ void CanvasView::removeImage(qsizetype index) {
   }
   emit imageCollectionChanged();
 }
+
+void CanvasView::removeCurrentImage() { removeImage(currentImageIndex_); }
+
+void CanvasView::clearImageShapes(qsizetype index) {
+  if (index < 0 || index >= imageCount()) {
+    return;
+  }
+  ImageDocument& document = *documents_[static_cast<std::size_t>(index)];
+  document.scene().cancelCreation();
+  if (document.scene().shapeCount() == 0) {
+    return;
+  }
+  document.undoStack().push(new DeleteAllShapesCommand{document.scene()});
+}
+
+void CanvasView::clearCurrentImageShapes() { clearImageShapes(currentImageIndex_); }
 
 void CanvasView::setZoomFactor(qreal factor) {
   const qreal bounded = std::clamp(factor, minimumZoom, maximumZoom);

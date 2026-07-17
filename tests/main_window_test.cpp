@@ -229,6 +229,8 @@ private slots:
   void hasExpectedTitle();
   void hasUsefulDefaultSize();
   void providesImageControls();
+  void toolbarDeletesAndCleansCurrentImage();
+  void thumbnailCleanTargetsClickedImage();
   void remembersLastOpenDirectory();
   void synchronizesToolbarZoomControl();
   void showsImageCoordinatesInStatusBar();
@@ -263,7 +265,9 @@ void MainWindowTest::hasUsefulDefaultSize() {
 
 void MainWindowTest::providesImageControls() {
   const quickshot::MainWindow window;
-  const auto* openButton = window.findChild<QPushButton*>("openButton");
+  const auto* openAction = window.findChild<QAction*>("openAction");
+  const auto* deleteCurrentImageAction = window.findChild<QAction*>("deleteCurrentImageAction");
+  const auto* cleanCurrentImageAction = window.findChild<QAction*>("cleanCurrentImageAction");
   const auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
   const auto* toolbar = window.findChild<QToolBar*>("mainToolBar");
   const auto* rotateLeftAction = window.findChild<QAction*>("rotateLeftAction");
@@ -278,8 +282,14 @@ void MainWindowTest::providesImageControls() {
   const auto* coordinateLabel = window.findChild<QLabel*>("coordinateLabel");
   const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
 
-  QVERIFY(openButton != nullptr);
-  QCOMPARE(openButton->text(), QStringLiteral("Open"));
+  QVERIFY(openAction != nullptr);
+  QVERIFY(deleteCurrentImageAction != nullptr);
+  QVERIFY(cleanCurrentImageAction != nullptr);
+  QVERIFY(!openAction->icon().isNull());
+  QVERIFY(!deleteCurrentImageAction->icon().isNull());
+  QVERIFY(!cleanCurrentImageAction->icon().isNull());
+  QVERIFY(!deleteCurrentImageAction->isEnabled());
+  QVERIFY(!cleanCurrentImageAction->isEnabled());
   QVERIFY(drawWidget != nullptr);
   QCOMPARE(window.centralWidget(), drawWidget);
   QVERIFY(toolbar != nullptr);
@@ -329,20 +339,97 @@ void MainWindowTest::providesImageControls() {
   QCOMPARE(zoomFactorSpinBox->maximum(), 8.0);
 
   const QList<QAction*> toolbarActions = toolbar->actions();
-  QCOMPARE(toolbarActions.size(), qsizetype{14});
-  QVERIFY(toolbarActions.at(1)->isSeparator());
-  QCOMPARE(toolbarActions.at(2), undoAction);
-  QCOMPARE(toolbarActions.at(3), redoAction);
-  QVERIFY(toolbarActions.at(4)->isSeparator());
-  QCOMPARE(toolbarActions.at(5), rotateLeftAction);
-  QCOMPARE(toolbarActions.at(6), rotateRightAction);
-  QCOMPARE(toolbar->widgetForAction(toolbarActions.at(7)), zoomFactorSpinBox);
-  QVERIFY(toolbarActions.at(8)->isSeparator());
-  QCOMPARE(toolbarActions.at(9), rectangleAction);
-  QCOMPARE(toolbarActions.at(10), ellipseAction);
-  QCOMPARE(toolbarActions.at(11), circleAction);
-  QCOMPARE(toolbarActions.at(12), polygonAction);
-  QCOMPARE(toolbarActions.at(13), bezierCurveAction);
+  QCOMPARE(toolbarActions.size(), qsizetype{16});
+  QCOMPARE(toolbarActions.at(0), openAction);
+  QCOMPARE(toolbarActions.at(1), deleteCurrentImageAction);
+  QCOMPARE(toolbarActions.at(2), cleanCurrentImageAction);
+  QVERIFY(toolbarActions.at(3)->isSeparator());
+  QCOMPARE(toolbarActions.at(4), undoAction);
+  QCOMPARE(toolbarActions.at(5), redoAction);
+  QVERIFY(toolbarActions.at(6)->isSeparator());
+  QCOMPARE(toolbarActions.at(7), rotateLeftAction);
+  QCOMPARE(toolbarActions.at(8), rotateRightAction);
+  QCOMPARE(toolbar->widgetForAction(toolbarActions.at(9)), zoomFactorSpinBox);
+  QVERIFY(toolbarActions.at(10)->isSeparator());
+  QCOMPARE(toolbarActions.at(11), rectangleAction);
+  QCOMPARE(toolbarActions.at(12), ellipseAction);
+  QCOMPARE(toolbarActions.at(13), circleAction);
+  QCOMPARE(toolbarActions.at(14), polygonAction);
+  QCOMPARE(toolbarActions.at(15), bezierCurveAction);
+}
+
+void MainWindowTest::toolbarDeletesAndCleansCurrentImage() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+  QImage image({160, 120}, QImage::Format_RGB32);
+  image.fill(Qt::black);
+  const QString firstPath = temporaryDirectory.filePath("first.png");
+  const QString secondPath = temporaryDirectory.filePath("second.png");
+  QVERIFY(image.save(firstPath));
+  QVERIFY(image.save(secondPath));
+
+  quickshot::MainWindow window;
+  auto* canvasView = window.findChild<quickshot::CanvasView*>("canvasView");
+  auto* deleteAction = window.findChild<QAction*>("deleteCurrentImageAction");
+  auto* cleanAction = window.findChild<QAction*>("cleanCurrentImageAction");
+  QVERIFY(canvasView != nullptr);
+  QVERIFY(deleteAction != nullptr);
+  QVERIFY(cleanAction != nullptr);
+  window.show();
+  QVERIFY(canvasView->loadImages({firstPath, secondPath}).isEmpty());
+  QCoreApplication::processEvents();
+  QVERIFY(deleteAction->isEnabled());
+  QVERIFY(!cleanAction->isEnabled());
+
+  canvasView->setCreationMode(quickshot::ShapeType::Rectangle, true);
+  drag(canvasView->viewport(), {20, 20}, {80, 70});
+  QCOMPARE(canvasView->shapeCount(), qsizetype{1});
+  QVERIFY(cleanAction->isEnabled());
+  cleanAction->trigger();
+  QCOMPARE(canvasView->shapeCount(), qsizetype{0});
+  QVERIFY(!cleanAction->isEnabled());
+  canvasView->undoStack().undo();
+  QCOMPARE(canvasView->shapeCount(), qsizetype{1});
+  QVERIFY(cleanAction->isEnabled());
+
+  deleteAction->trigger();
+  QCOMPARE(canvasView->imageCount(), qsizetype{1});
+  QCOMPARE(canvasView->imagePathAt(0), secondPath);
+  QVERIFY(deleteAction->isEnabled());
+  QVERIFY(!cleanAction->isEnabled());
+}
+
+void MainWindowTest::thumbnailCleanTargetsClickedImage() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+  QImage image({160, 120}, QImage::Format_RGB32);
+  image.fill(Qt::black);
+  const QString firstPath = temporaryDirectory.filePath("first.png");
+  const QString secondPath = temporaryDirectory.filePath("second.png");
+  QVERIFY(image.save(firstPath));
+  QVERIFY(image.save(secondPath));
+
+  quickshot::MainWindow window;
+  auto* canvasView = window.findChild<quickshot::CanvasView*>("canvasView");
+  auto* imageList = window.findChild<QListWidget*>("imageListView");
+  QVERIFY(canvasView != nullptr);
+  QVERIFY(imageList != nullptr);
+  window.show();
+  QVERIFY(canvasView->loadImages({firstPath, secondPath}).isEmpty());
+  QCoreApplication::processEvents();
+
+  canvasView->setCreationMode(quickshot::ShapeType::Rectangle, true);
+  drag(canvasView->viewport(), {20, 20}, {80, 70});
+  QCOMPARE(canvasView->shapeCount(), qsizetype{1});
+  canvasView->setCurrentImageIndex(1);
+  QCOMPARE(canvasView->shapeCount(), qsizetype{0});
+
+  QVERIFY(triggerImageListContextMenuAction(*imageList, 0, "cleanImageAction"));
+  QCOMPARE(canvasView->currentImageIndex(), qsizetype{1});
+  canvasView->setCurrentImageIndex(0);
+  QCOMPARE(canvasView->shapeCount(), qsizetype{0});
+  canvasView->undoStack().undo();
+  QCOMPARE(canvasView->shapeCount(), qsizetype{1});
 }
 
 void MainWindowTest::remembersLastOpenDirectory() {
@@ -367,8 +454,8 @@ void MainWindowTest::remembersLastOpenDirectory() {
   QVERIFY(sourceImage.save(imagePath));
 
   quickshot::MainWindow window;
-  auto* openButton = window.findChild<QPushButton*>("openButton");
-  QVERIFY(openButton != nullptr);
+  auto* openAction = window.findChild<QAction*>("openAction");
+  QVERIFY(openAction != nullptr);
   window.show();
   QCoreApplication::processEvents();
 
@@ -393,7 +480,7 @@ void MainWindowTest::remembersLastOpenDirectory() {
       openButton->click();
     }
   });
-  QTest::mouseClick(openButton, Qt::LeftButton);
+  openAction->trigger();
   QCoreApplication::processEvents();
 
   QSettings persistedSettings;
@@ -411,7 +498,7 @@ void MainWindowTest::remembersLastOpenDirectory() {
     secondDialogDirectory = dialog->directory().absolutePath();
     dialog->reject();
   });
-  QTest::mouseClick(openButton, Qt::LeftButton);
+  openAction->trigger();
   QCoreApplication::processEvents();
 
   if (hadPreviousValue) {

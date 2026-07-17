@@ -20,7 +20,6 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
-#include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QStandardPaths>
@@ -81,15 +80,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new C
   resize(720, 420);
 
   auto* toolbar = addToolBar(tr("File"));
-  auto* openButton = new QPushButton(tr("Open"), toolbar);
 
   toolbar->setObjectName("mainToolBar");
   toolbar->setMovable(false);
   toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-  openButton->setObjectName("openButton");
   canvasView_->setObjectName("canvasView");
 
-  toolbar->addWidget(openButton);
+  auto* openAction =
+      toolbar->addAction(QIcon::fromTheme(QStringLiteral("document-open"),
+                                          style()->standardIcon(QStyle::SP_DialogOpenButton)),
+                         tr("Open Images"));
+  auto* deleteCurrentImageAction = toolbar->addAction(
+      QIcon::fromTheme(QStringLiteral("edit-delete"), style()->standardIcon(QStyle::SP_TrashIcon)),
+      tr("Delete Current Image"));
+  auto* cleanCurrentImageAction =
+      toolbar->addAction(QIcon::fromTheme(QStringLiteral("edit-clear"),
+                                          style()->standardIcon(QStyle::SP_DialogResetButton)),
+                         tr("Clean Current Image Shapes"));
+  openAction->setObjectName("openAction");
+  deleteCurrentImageAction->setObjectName("deleteCurrentImageAction");
+  cleanCurrentImageAction->setObjectName("cleanCurrentImageAction");
+  deleteCurrentImageAction->setEnabled(false);
+  cleanCurrentImageAction->setEnabled(false);
   toolbar->addSeparator();
 
   QAction* undoAction = canvasView_->undoGroup().createUndoAction(this, tr("Undo"));
@@ -174,7 +186,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new C
   shapeActions->addAction(polygonAction);
   shapeActions->addAction(bezierCurveAction);
 
-  connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
+  connect(openAction, &QAction::triggered, this, &MainWindow::openImage);
+  connect(deleteCurrentImageAction, &QAction::triggered, canvasView_,
+          &CanvasView::removeCurrentImage);
+  connect(cleanCurrentImageAction, &QAction::triggered, canvasView_,
+          &CanvasView::clearCurrentImageShapes);
   connect(rotateLeftAction, &QAction::triggered, canvasView_, &CanvasView::rotateLeft);
   connect(rotateRightAction, &QAction::triggered, canvasView_, &CanvasView::rotateRight);
   connect(zoomFactorSpinBox, &QDoubleSpinBox::valueChanged, canvasView_,
@@ -192,6 +208,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new C
   connect(bezierCurveAction, &QAction::triggered, this,
           [this](bool enabled) { canvasView_->setCreationMode(ShapeType::BezierCurve, enabled); });
   connect(canvasView_, &CanvasView::imageAvailabilityChanged, rotateLeftAction,
+          &QAction::setEnabled);
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, deleteCurrentImageAction,
+          &QAction::setEnabled);
+  connect(canvasView_, &CanvasView::currentShapeAvailabilityChanged, cleanCurrentImageAction,
           &QAction::setEnabled);
   connect(canvasView_, &CanvasView::imageAvailabilityChanged, rotateRightAction,
           &QAction::setEnabled);
@@ -238,7 +258,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new C
   imageDock->hide();
 
   auto* deleteImageAction = new QAction{tr("Delete"), imageList};
+  deleteImageAction->setIcon(
+      QIcon::fromTheme(QStringLiteral("edit-delete"), style()->standardIcon(QStyle::SP_TrashIcon)));
   deleteImageAction->setObjectName("deleteImageAction");
+  auto* cleanImageAction = new QAction{tr("Clean Shapes"), imageList};
+  cleanImageAction->setIcon(QIcon::fromTheme(QStringLiteral("edit-clear"),
+                                             style()->standardIcon(QStyle::SP_DialogResetButton)));
+  cleanImageAction->setObjectName("cleanImageAction");
   connect(deleteImageAction, &QAction::triggered, this, [this, deleteImageAction]() {
     bool validIndex = false;
     const qsizetype index = deleteImageAction->data().toLongLong(&validIndex);
@@ -246,15 +272,26 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new C
       canvasView_->removeImage(index);
     }
   });
+  connect(cleanImageAction, &QAction::triggered, this, [this, cleanImageAction]() {
+    bool validIndex = false;
+    const qsizetype index = cleanImageAction->data().toLongLong(&validIndex);
+    if (validIndex) {
+      canvasView_->clearImageShapes(index);
+    }
+  });
   connect(imageList, &QListWidget::customContextMenuRequested, imageList,
-          [imageList, deleteImageAction](const QPoint& position) {
+          [this, imageList, deleteImageAction, cleanImageAction](const QPoint& position) {
             QListWidgetItem* item = imageList->itemAt(position);
             if (item == nullptr) {
               return;
             }
-
-            deleteImageAction->setData(imageList->row(item));
+            const int row = imageList->row(item);
+            deleteImageAction->setData(row);
+            cleanImageAction->setData(row);
+            cleanImageAction->setEnabled(canvasView_->shapeCountAt(row) > 0);
             QMenu menu{imageList};
+            menu.addAction(cleanImageAction);
+            menu.addSeparator();
             menu.addAction(deleteImageAction);
             menu.exec(imageList->viewport()->mapToGlobal(position));
           });
