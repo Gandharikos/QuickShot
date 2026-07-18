@@ -50,7 +50,6 @@ public:
   void appendCreationPoint(const QPointF& point);
   void setCreationPreview(const QPointF& point);
   void finishCreation();
-  void applyImageTransform(const QTransform& transformation);
 
 protected:
   [[nodiscard]] QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;

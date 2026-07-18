@@ -236,6 +236,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), canvasView_(new C
   connect(canvasView_, &CanvasView::cursorLeftImage, coordinateLabel,
           [coordinateLabel]() { coordinateLabel->setText(MainWindow::tr("X: —  Y: —")); });
 
+  auto* rotationLabel = new QLabel(tr("Rotation: —"), this);
+  rotationLabel->setObjectName("rotationLabel");
+  statusBar()->addPermanentWidget(rotationLabel);
+  connect(canvasView_, &CanvasView::imageRotationChanged, rotationLabel,
+          [rotationLabel](qreal degrees) {
+            const qreal displayedDegrees = qFuzzyIsNull(degrees) ? 0.0 : degrees;
+            rotationLabel->setText(
+                MainWindow::tr("Rotation: %1°").arg(displayedDegrees, 0, 'f', 1));
+          });
+  connect(canvasView_, &CanvasView::imageAvailabilityChanged, rotationLabel,
+          [this, rotationLabel](bool available) {
+            if (!available) {
+              rotationLabel->setText(MainWindow::tr("Rotation: —"));
+              return;
+            }
+            const qreal degrees = canvasView_->imageRotationDegrees();
+            rotationLabel->setText(MainWindow::tr("Rotation: %1°").arg(degrees, 0, 'f', 1));
+          });
+
   auto* imageDock = new QDockWidget(tr("Images"), this);
   auto* imageList = new QListWidget(imageDock);
   imageDock->setObjectName("imageDockWidget");

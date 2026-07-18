@@ -39,13 +39,28 @@
 
 namespace {
 
-void sendControlWheel(quickshot::CanvasView& drawWidget, int angleDelta,
-                      const QPointF& position = {30.0, 20.0}) {
+void sendModifiedWheel(quickshot::CanvasView& drawWidget, const QPoint& angleDelta,
+                       Qt::KeyboardModifiers modifiers, const QPointF& position = {30.0, 20.0}) {
   const QPoint globalPosition = drawWidget.viewport()->mapToGlobal(position.toPoint());
-  QWheelEvent event{position,     globalPosition,      QPoint{},          QPoint{0, angleDelta},
-                    Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false};
+  QWheelEvent event{position,     globalPosition, QPoint{},          angleDelta,
+                    Qt::NoButton, modifiers,      Qt::NoScrollPhase, false};
   QCoreApplication::sendEvent(drawWidget.viewport(), &event);
   QCoreApplication::processEvents();
+}
+
+void sendControlWheel(quickshot::CanvasView& drawWidget, int angleDelta,
+                      const QPointF& position = {30.0, 20.0}) {
+  sendModifiedWheel(drawWidget, {0, angleDelta}, Qt::ControlModifier, position);
+}
+
+void sendAltWheel(quickshot::CanvasView& drawWidget, int angleDelta,
+                  const QPointF& position = {30.0, 20.0}) {
+  sendModifiedWheel(drawWidget, {angleDelta, 0}, Qt::AltModifier, position);
+}
+
+void sendControlAltWheel(quickshot::CanvasView& drawWidget, int angleDelta,
+                         const QPointF& position = {30.0, 20.0}) {
+  sendModifiedWheel(drawWidget, {angleDelta, 0}, Qt::ControlModifier | Qt::AltModifier, position);
 }
 
 void sendWheel(QWidget& widget, int angleDelta) {
@@ -235,6 +250,8 @@ private slots:
   void synchronizesToolbarZoomControl();
   void showsImageCoordinatesInStatusBar();
   void enablesAndRunsRotationActions();
+  void rotatesImageWithControlAltWheel();
+  void keepsIndependentImageRotations();
   void undoesAndRedoesDragOperations();
   void createsMovesAndResizesShapes();
   void createsCirclesAndPolygons();
@@ -280,6 +297,7 @@ void MainWindowTest::providesImageControls() {
   const auto* polygonAction = window.findChild<QAction*>("polygonAction");
   const auto* bezierCurveAction = window.findChild<QAction*>("bezierCurveAction");
   const auto* coordinateLabel = window.findChild<QLabel*>("coordinateLabel");
+  const auto* rotationLabel = window.findChild<QLabel*>("rotationLabel");
   const auto* zoomFactorSpinBox = window.findChild<QDoubleSpinBox*>("zoomFactorSpinBox");
 
   QVERIFY(openAction != nullptr);
@@ -305,6 +323,8 @@ void MainWindowTest::providesImageControls() {
   QVERIFY(bezierCurveAction != nullptr);
   QVERIFY(coordinateLabel != nullptr);
   QCOMPARE(coordinateLabel->text(), QStringLiteral("X: —  Y: —"));
+  QVERIFY(rotationLabel != nullptr);
+  QCOMPARE(rotationLabel->text(), QStringLiteral("Rotation: —"));
   QVERIFY(zoomFactorSpinBox != nullptr);
   QCOMPARE(rotateLeftAction->text(), QStringLiteral("Rotate Left"));
   QCOMPARE(rotateRightAction->text(), QStringLiteral("Rotate Right"));
@@ -607,6 +627,7 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   auto* circleAction = window.findChild<QAction*>("circleAction");
   auto* polygonAction = window.findChild<QAction*>("polygonAction");
   auto* bezierCurveAction = window.findChild<QAction*>("bezierCurveAction");
+  auto* rotationLabel = window.findChild<QLabel*>("rotationLabel");
   QVERIFY(drawWidget != nullptr);
   QVERIFY(rotateLeftAction != nullptr);
   QVERIFY(rotateRightAction != nullptr);
@@ -615,6 +636,7 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QVERIFY(circleAction != nullptr);
   QVERIFY(polygonAction != nullptr);
   QVERIFY(bezierCurveAction != nullptr);
+  QVERIFY(rotationLabel != nullptr);
 
   window.resize(180, 180);
   window.show();
@@ -630,14 +652,80 @@ void MainWindowTest::enablesAndRunsRotationActions() {
   QVERIFY(bezierCurveAction->isEnabled());
   QVERIFY(drawWidget->horizontalScrollBar()->maximum() > 0);
   QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
+  QCOMPARE(drawWidget->imageRotationDegrees(), 0.0);
+  QCOMPARE(rotationLabel->text(), QStringLiteral("Rotation: 0.0°"));
 
   rotateRightAction->trigger();
-  QCOMPARE(drawWidget->horizontalScrollBar()->maximum(), 0);
-  QVERIFY(drawWidget->verticalScrollBar()->maximum() > 0);
+  QCOMPARE(drawWidget->imageRotationDegrees(), 15.0);
+  QCOMPARE(rotationLabel->text(), QStringLiteral("Rotation: 15.0°"));
 
   rotateLeftAction->trigger();
+  QCOMPARE(drawWidget->imageRotationDegrees(), 0.0);
+  QCOMPARE(rotationLabel->text(), QStringLiteral("Rotation: 0.0°"));
+}
+
+void MainWindowTest::rotatesImageWithControlAltWheel() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage sourceImage({600, 200}, QImage::Format_RGB32);
+  sourceImage.fill(Qt::black);
+  const QString imagePath = temporaryDirectory.filePath("wheel-rotation.png");
+  QVERIFY(sourceImage.save(imagePath));
+
+  quickshot::MainWindow window;
+  window.resize(260, 280);
+  auto* drawWidget = window.findChild<quickshot::CanvasView*>("canvasView");
+  auto* rotationLabel = window.findChild<QLabel*>("rotationLabel");
+  QVERIFY(drawWidget != nullptr);
+  QVERIFY(rotationLabel != nullptr);
+  window.show();
+  QCoreApplication::processEvents();
+  QVERIFY(drawWidget->loadImage(imagePath));
+
   QVERIFY(drawWidget->horizontalScrollBar()->maximum() > 0);
-  QCOMPARE(drawWidget->verticalScrollBar()->maximum(), 0);
+  const qreal zoomBeforeAltWheel = drawWidget->zoomFactor();
+  sendAltWheel(*drawWidget, -120);
+  QVERIFY(drawWidget->horizontalScrollBar()->value() > 0);
+  QCOMPARE(drawWidget->imageRotationDegrees(), 0.0);
+  QCOMPARE(drawWidget->zoomFactor(), zoomBeforeAltWheel);
+
+  sendControlAltWheel(*drawWidget, 120);
+  QCOMPARE(drawWidget->imageRotationDegrees(), 1.0);
+  QCOMPARE(rotationLabel->text(), QStringLiteral("Rotation: 1.0°"));
+
+  sendControlAltWheel(*drawWidget, -240);
+  QCOMPARE(drawWidget->imageRotationDegrees(), -1.0);
+  QCOMPARE(rotationLabel->text(), QStringLiteral("Rotation: -1.0°"));
+  QVERIFY(triggerContextMenuAction(*drawWidget, {20, 20}, "deleteAllShapesAction"));
+
+  const qreal zoomBeforeCombinedModifiers = drawWidget->zoomFactor();
+  sendControlAltWheel(*drawWidget, 120);
+  QCOMPARE(drawWidget->imageRotationDegrees(), 0.0);
+  QCOMPARE(drawWidget->zoomFactor(), zoomBeforeCombinedModifiers);
+}
+
+void MainWindowTest::keepsIndependentImageRotations() {
+  QTemporaryDir temporaryDirectory;
+  QVERIFY(temporaryDirectory.isValid());
+
+  QImage image({120, 80}, QImage::Format_RGB32);
+  image.fill(Qt::black);
+  const QString firstPath = temporaryDirectory.filePath("first.png");
+  const QString secondPath = temporaryDirectory.filePath("second.png");
+  QVERIFY(image.save(firstPath));
+  QVERIFY(image.save(secondPath));
+
+  quickshot::CanvasView drawWidget;
+  QCOMPARE(drawWidget.loadImages({firstPath, secondPath}).size(), 0);
+  drawWidget.rotateRight();
+  QCOMPARE(drawWidget.imageRotationDegrees(), 15.0);
+  drawWidget.setCurrentImageIndex(1);
+  QCOMPARE(drawWidget.imageRotationDegrees(), 0.0);
+  drawWidget.rotateLeft();
+  QCOMPARE(drawWidget.imageRotationDegrees(), -15.0);
+  drawWidget.setCurrentImageIndex(0);
+  QCOMPARE(drawWidget.imageRotationDegrees(), 15.0);
 }
 
 void MainWindowTest::undoesAndRedoesDragOperations() {
@@ -757,8 +845,9 @@ void MainWindowTest::createsMovesAndResizesShapes() {
   QCOMPARE(drawWidget.viewport()->cursor().shape(), Qt::SizeVerCursor);
 
   drawWidget.rotateRight();
-  QCOMPARE(drawWidget.shapeAt(0)->path().boundingRect().size(), QSizeF(70.0, 80.0));
-  QCOMPARE(drawWidget.shapeAt(0)->rotationDegrees(), 90.0);
+  QCOMPARE(drawWidget.imageRotationDegrees(), 15.0);
+  QCOMPARE(drawWidget.shapeAt(0)->path().boundingRect().size(), QSizeF(80.0, 70.0));
+  QCOMPARE(drawWidget.shapeAt(0)->rotationDegrees(), 0.0);
 }
 
 void MainWindowTest::createsCirclesAndPolygons() {

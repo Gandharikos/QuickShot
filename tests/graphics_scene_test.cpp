@@ -1,4 +1,5 @@
 #include "quickshot/image_scene.hpp"
+#include "quickshot/roi_exporter.hpp"
 #include "quickshot/shape_commands.hpp"
 #include "quickshot/shape_item.hpp"
 #include "quickshot/shapes/shape.hpp"
@@ -25,6 +26,7 @@ private slots:
   void shapeItemsOwnScreenSizedHandles();
   void deleteCommandTransfersOwnershipAcrossUndoRedo();
   void documentsKeepIndependentSceneState();
+  void rotatesContentWithoutMutatingShapeGeometry();
 };
 
 void GraphicsSceneTest::shapeItemsOwnScreenSizedHandles() {
@@ -68,6 +70,24 @@ void GraphicsSceneTest::documentsKeepIndependentSceneState() {
   QCOMPARE(second.shapeCount(), qsizetype{0});
   QCOMPARE(first.imageBounds(), QRectF(0.0, 0.0, 200.0, 150.0));
   QCOMPARE(second.imageBounds(), QRectF(0.0, 0.0, 100.0, 80.0));
+}
+
+void GraphicsSceneTest::rotatesContentWithoutMutatingShapeGeometry() {
+  quickshot::ImageScene scene{QImage{200, 150, QImage::Format_RGB32}};
+  QUndoStack undoStack;
+  scene.setUndoStack(undoStack);
+  quickshot::ShapeItem& item = addRectangle(scene, {20.0, 30.0, 80.0, 60.0});
+  const QRectF originalBounds = item.model().boundingRect();
+
+  scene.setRotationDegrees(90.0);
+
+  QCOMPARE(scene.rotationDegrees(), 90.0);
+  QCOMPARE(scene.displayImage().size(), QSize(150, 200));
+  QCOMPARE(item.model().boundingRect(), originalBounds);
+  QCOMPARE(item.model().rotationDegrees(), 0.0);
+  QCOMPARE(scene.imagePosition(scene.imageCenterInScene()), scene.imageBounds().center());
+  QVERIFY(quickshot::isRoiWithinImage(scene.displayImage(),
+                                      scene.displayTransform().map(item.imagePath())));
 }
 
 } // namespace

@@ -22,6 +22,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QWheelEvent>
+#include <QtMath>
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -33,6 +34,8 @@ constexpr qreal minimumZoom = 0.1;
 constexpr qreal maximumZoom = 8.0;
 constexpr qreal zoomPerWheelStep = 1.1;
 constexpr qreal wheelStepAngle = 120.0;
+constexpr qreal imageRotationStep = 15.0;
+constexpr qreal imageRotationPerWheelStep = 1.0;
 
 QString pngFileName(const QString& selectedFileName) {
   const QFileInfo selectedFile{selectedFileName};
@@ -142,13 +145,25 @@ QString CanvasView::imagePathAt(qsizetype index) const {
 }
 
 QImage CanvasView::thumbnailAt(qsizetype index, const QSize& size) const {
-  return index >= 0 && index < imageCount()
-             ? documents_[static_cast<std::size_t>(index)]->image().scaled(
-                   size, Qt::KeepAspectRatio, Qt::SmoothTransformation)
-             : QImage{};
+  if (index < 0 || index >= imageCount()) {
+    return {};
+  }
+  const ImageDocument& document = *documents_[static_cast<std::size_t>(index)];
+  QImage thumbnail = document.image().scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  if (!qFuzzyIsNull(document.scene().rotationDegrees())) {
+    QTransform rotation;
+    rotation.rotate(document.scene().rotationDegrees());
+    thumbnail = thumbnail.transformed(rotation, Qt::SmoothTransformation);
+  }
+  return thumbnail.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
 qreal CanvasView::zoomFactor() const noexcept { return zoomFactor_; }
+
+qreal CanvasView::imageRotationDegrees() const noexcept {
+  const ImageScene* current = imageScene();
+  return current == nullptr ? 0.0 : current->rotationDegrees();
+}
 
 QSize CanvasView::sizeHint() const { return {640, 360}; }
 
@@ -200,6 +215,7 @@ void CanvasView::setCurrentImageIndex(qsizetype index) {
   verticalScrollBar()->setValue(0);
   emit cursorLeftImage();
   emit currentImageChanged(index);
+  emit imageRotationChanged(document.scene().rotationDegrees());
   emit currentShapeAvailabilityChanged(document.scene().shapeCount() > 0);
 }
 
@@ -222,6 +238,7 @@ void CanvasView::removeImage(qsizetype index) {
     setZoomFactor(1.0);
     emit cursorLeftImage();
     emit currentImageChanged(-1);
+    emit imageRotationChanged(0.0);
     emit imageCollectionChanged();
     emit imageAvailabilityChanged(false);
     emit currentShapeAvailabilityChanged(false);
@@ -275,9 +292,9 @@ void CanvasView::setCreationMode(ShapeType type, bool enabled) {
   }
 }
 
-void CanvasView::rotateLeft() { rotateImage(-90.0); }
+void CanvasView::rotateLeft() { rotateImage(-imageRotationStep); }
 
-void CanvasView::rotateRight() { rotateImage(90.0); }
+void CanvasView::rotateRight() { rotateImage(imageRotationStep); }
 
 void CanvasView::contextMenuEvent(QContextMenuEvent* event) {
   ImageScene* current = imageScene();
@@ -316,10 +333,11 @@ void CanvasView::leaveEvent(QEvent* event) {
 }
 
 void CanvasView::mouseMoveEvent(QMouseEvent* event) {
-  const QPointF point = mapToScene(event->position().toPoint());
   const ImageScene* current = imageScene();
-  if (current != nullptr && current->imageBounds().contains(point)) {
-    emit cursorImagePositionChanged(point);
+  const QPointF scenePosition = mapToScene(event->position().toPoint());
+  const QPointF imagePoint = current == nullptr ? QPointF{} : current->imagePosition(scenePosition);
+  if (current != nullptr && current->imageBounds().contains(imagePoint)) {
+    emit cursorImagePositionChanged(imagePoint);
   } else {
     emit cursorLeftImage();
   }
@@ -327,13 +345,32 @@ void CanvasView::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void CanvasView::wheelEvent(QWheelEvent* event) {
-  const int delta = event->angleDelta().y();
-  if (!hasImage() || !event->modifiers().testFlag(Qt::ControlModifier) || delta == 0) {
+  if (!hasImage()) {
     QGraphicsView::wheelEvent(event);
     return;
   }
-  const qreal steps = static_cast<qreal>(delta) / wheelStepAngle;
-  setZoomFactor(zoomFactor_ * std::pow(zoomPerWheelStep, steps));
+
+  const QPoint angleDelta = event->angleDelta();
+  const Qt::KeyboardModifiers modifiers = event->modifiers();
+  const bool controlPressed = modifiers.testFlag(Qt::ControlModifier);
+  const bool altPressed = modifiers.testFlag(Qt::AltModifier);
+  if (controlPressed && altPressed) {
+    // Qt converts Alt+vertical-wheel navigation into a horizontal delta before the event reaches
+    // the view. Prefer a vertical delta when available, otherwise consume the converted delta.
+    const int rotationDelta = angleDelta.y() != 0 ? angleDelta.y() : angleDelta.x();
+    if (rotationDelta == 0) {
+      QGraphicsView::wheelEvent(event);
+      return;
+    }
+    const qreal steps = static_cast<qreal>(rotationDelta) / wheelStepAngle;
+    rotateImage(imageRotationPerWheelStep * steps);
+  } else if (controlPressed && angleDelta.y() != 0) {
+    const qreal steps = static_cast<qreal>(angleDelta.y()) / wheelStepAngle;
+    setZoomFactor(zoomFactor_ * std::pow(zoomPerWheelStep, steps));
+  } else {
+    QGraphicsView::wheelEvent(event);
+    return;
+  }
   event->accept();
 }
 
@@ -443,10 +480,12 @@ void CanvasView::saveRois(const std::vector<ShapeItem*>& targets) {
           QMessageBox::Yes) {
     return;
   }
+  const QImage displayedImage = imageScene()->displayImage();
+  const QTransform displayTransform = imageScene()->displayTransform();
   for (std::size_t index = 0; index < targets.size(); ++index) {
     QString error;
-    if (!saveRoiPng(currentDocument()->image(), targets[index]->imagePath(), outputs[index],
-                    &error)) {
+    if (!saveRoiPng(displayedImage, displayTransform.map(targets[index]->imagePath()),
+                    outputs[index], &error)) {
       QMessageBox::warning(this, tr("Unable to Save ROI"),
                            tr("Could not save %1: %2").arg(outputs[index], error));
       return;
@@ -465,9 +504,13 @@ void CanvasView::batchSaveRois(const std::vector<ShapeItem*>& targets) {
   }
   std::vector<BatchSaveRow> rows;
   for (qsizetype index = 0; index < imageCount(); ++index) {
-    const QImage& image = documents_[static_cast<std::size_t>(index)]->image();
-    const bool savable = std::ranges::all_of(
-        paths, [&image](const QPainterPath& path) { return isRoiWithinImage(image, path); });
+    const ImageScene& scene = documents_[static_cast<std::size_t>(index)]->scene();
+    const QImage image = scene.displayImage();
+    const QTransform transformation = scene.displayTransform();
+    const bool savable =
+        std::ranges::all_of(paths, [&image, &transformation](const QPainterPath& path) {
+          return isRoiWithinImage(image, transformation.map(path));
+        });
     rows.push_back({.imagePath = imagePathAt(index),
                     .savable = savable,
                     .statusMessage = savable ? tr("All selected ROIs fit inside this image.")
@@ -488,6 +531,8 @@ void CanvasView::batchSaveRois(const std::vector<ShapeItem*>& targets) {
       continue;
     }
     const ImageDocument& document = *documents_[static_cast<std::size_t>(imageIndex)];
+    const QImage image = document.scene().displayImage();
+    const QTransform transformation = document.scene().displayTransform();
     const QString stem = QFileInfo{document.filePath()}.completeBaseName();
     for (const QPainterPath& path : paths) {
       ++sequence;
@@ -496,7 +541,7 @@ void CanvasView::batchSaveRois(const std::vector<ShapeItem*>& targets) {
               .arg(stem, timestamp)
               .arg(static_cast<qulonglong>(sequence), 3, 10, QChar{'0'}));
       QString error;
-      if (!saveRoiPng(document.image(), path, name, &error)) {
+      if (!saveRoiPng(image, transformation.map(path), name, &error)) {
         failures.push_back(tr("%1: %2").arg(name, error));
       }
     }
@@ -507,18 +552,18 @@ void CanvasView::batchSaveRois(const std::vector<ShapeItem*>& targets) {
 }
 
 void CanvasView::rotateImage(qreal degrees) {
-  ImageDocument* document = currentDocument();
-  if (document == nullptr) {
+  ImageScene* current = imageScene();
+  if (current == nullptr || qFuzzyIsNull(degrees)) {
     return;
   }
-  imageScene()->cancelCreation();
-  undoStack().clear();
-  QTransform rotation;
-  rotation.rotate(degrees);
-  const QTransform shapeTransformation =
-      QImage::trueMatrix(rotation, document->image().width(), document->image().height());
-  imageScene()->applyImageTransform(shapeTransformation);
-  document->setImage(document->image().transformed(rotation));
+  current->cancelCreation();
+  const QPoint centerBeforeRotation = mapFromScene(current->imageCenterInScene());
+  current->setRotationDegrees(current->rotationDegrees() + degrees);
+  const QPoint centerAfterRotation = mapFromScene(current->imageCenterInScene());
+  const QPoint centerMovement = centerAfterRotation - centerBeforeRotation;
+  horizontalScrollBar()->setValue(horizontalScrollBar()->value() + centerMovement.x());
+  verticalScrollBar()->setValue(verticalScrollBar()->value() + centerMovement.y());
+  emit imageRotationChanged(current->rotationDegrees());
   emit imageThumbnailChanged(currentImageIndex_);
 }
 

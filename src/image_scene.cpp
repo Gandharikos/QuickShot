@@ -5,15 +5,41 @@
 #include <QGraphicsItem>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
+#include <QTransform>
 #include <QUndoStack>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
 
 namespace quickshot {
+// The image and every ROI item share this parent so one Graphics View transform rotates the whole
+// document without resampling pixels or rewriting shape geometry.
+class ImageContentItem final : public QGraphicsItem {
+public:
+  explicit ImageContentItem(const QRectF& bounds) : bounds_(bounds) {
+    setAcceptedMouseButtons(Qt::NoButton);
+    setFlag(QGraphicsItem::ItemHasNoContents);
+    setTransformOriginPoint(bounds_.center());
+  }
+
+  [[nodiscard]] QRectF boundingRect() const override { return bounds_; }
+
+  void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget*) override {}
+
+  void setBounds(const QRectF& bounds) {
+    prepareGeometryChange();
+    bounds_ = bounds;
+    setTransformOriginPoint(bounds_.center());
+  }
+
+private:
+  QRectF bounds_;
+};
+
 class ImageItem final : public QGraphicsItem {
 public:
-  explicit ImageItem(QImage image) : image_(std::move(image)) {
+  ImageItem(QImage image, QGraphicsItem* parent) : QGraphicsItem(parent), image_(std::move(image)) {
     setAcceptedMouseButtons(Qt::NoButton);
     setZValue(-1.0);
   }
@@ -48,9 +74,11 @@ bool hasUsableArea(const ShapeItem& item) {
 } // namespace
 
 ImageScene::ImageScene(QImage image, QObject* parent)
-    : QGraphicsScene(parent), image_(std::move(image)), imageItem_(new ImageItem{image_}) {
-  addItem(imageItem_);
-  setSceneRect(imageBounds());
+    : QGraphicsScene(parent), image_(std::move(image)),
+      contentItem_(new ImageContentItem{imageBounds()}),
+      imageItem_(new ImageItem{image_, contentItem_}) {
+  addItem(contentItem_);
+  updateSceneRect();
 }
 
 ImageScene::~ImageScene() = default;
@@ -62,10 +90,48 @@ const QImage& ImageScene::image() const noexcept { return image_; }
 void ImageScene::setImage(QImage image) {
   image_ = std::move(image);
   imageItem_->setImage(image_);
-  setSceneRect(imageBounds());
+  contentItem_->setBounds(imageBounds());
+  updateSceneRect();
 }
 
 QRectF ImageScene::imageBounds() const noexcept { return {QPointF{}, QSizeF{image_.size()}}; }
+
+QPointF ImageScene::imagePosition(const QPointF& scenePosition) const {
+  return contentItem_->mapFromScene(scenePosition);
+}
+
+QPointF ImageScene::imageCenterInScene() const {
+  return contentItem_->mapToScene(imageBounds().center());
+}
+
+QTransform ImageScene::displayTransform() const {
+  QTransform rotation;
+  rotation.rotate(rotationDegrees());
+  return QImage::trueMatrix(rotation, image_.width(), image_.height());
+}
+
+QImage ImageScene::displayImage() const {
+  if (qFuzzyIsNull(rotationDegrees())) {
+    return image_;
+  }
+  QTransform rotation;
+  rotation.rotate(rotationDegrees());
+  return image_.transformed(rotation, Qt::SmoothTransformation);
+}
+
+qreal ImageScene::rotationDegrees() const noexcept { return contentItem_->rotation(); }
+
+void ImageScene::setRotationDegrees(qreal degrees) {
+  qreal normalized = std::remainder(degrees, 360.0);
+  if (qFuzzyIsNull(normalized)) {
+    normalized = 0.0;
+  }
+  if (qFuzzyIsNull(rotationDegrees() - normalized)) {
+    return;
+  }
+  contentItem_->setRotation(normalized);
+  updateSceneRect();
+}
 
 void ImageScene::setCreationMode(ShapeType type, bool enabled) {
   if (enabled) {
@@ -150,7 +216,7 @@ std::unique_ptr<ShapeItem> ImageScene::makeOffsetClone(const ShapeItem& source) 
 }
 
 void ImageScene::addShapeItem(ShapeItem& item) {
-  addItem(&item);
+  item.setParentItem(contentItem_);
   nextShapeZ_ = std::max(nextShapeZ_, item.zValue() + 1.0);
   emit shapeCollectionChanged();
 }
@@ -159,6 +225,7 @@ std::unique_ptr<ShapeItem> ImageScene::takeShapeItem(ShapeItem& item) {
   if (item.scene() != this) {
     return nullptr;
   }
+  item.setParentItem(nullptr);
   removeItem(&item);
   emit shapeCollectionChanged();
   return std::unique_ptr<ShapeItem>{&item};
@@ -180,19 +247,13 @@ bool ImageScene::consumeContextMenuSuppression() noexcept {
   return std::exchange(suppressContextMenu_, false);
 }
 
-void ImageScene::applyImageTransform(const QTransform& transformation) {
-  cancelCreation();
-  for (ShapeItem* item : shapeItems()) {
-    item->applyImageTransform(transformation);
-  }
-}
-
 void ImageScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
   if (provisionalShape_ != nullptr) {
+    const QPointF point = imagePosition(event->scenePos());
     if (provisionalShape_->model().creationKind() == CreationKind::MultiPoint) {
-      provisionalShape_->setCreationPreview(event->scenePos());
+      provisionalShape_->setCreationPreview(point);
     } else {
-      provisionalShape_->updateCreation(creationOrigin_, imageBounds(), event->scenePos());
+      provisionalShape_->updateCreation(creationOrigin_, imageBounds(), point);
     }
     event->accept();
     return;
@@ -201,20 +262,21 @@ void ImageScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 void ImageScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+  const QPointF point = imagePosition(event->scenePos());
   if (provisionalShape_ != nullptr &&
       provisionalShape_->model().creationKind() == CreationKind::MultiPoint) {
     if (event->button() == Qt::RightButton) {
       finishCreation(true);
-    } else if (event->button() == Qt::LeftButton && imageBounds().contains(event->scenePos())) {
-      provisionalShape_->appendCreationPoint(event->scenePos());
+    } else if (event->button() == Qt::LeftButton && imageBounds().contains(point)) {
+      provisionalShape_->appendCreationPoint(point);
     }
     event->accept();
     return;
   }
 
   if (event->button() == Qt::LeftButton && creationType_.has_value() &&
-      imageBounds().contains(event->scenePos()) && shapeItemAt(event->scenePos()) == nullptr) {
-    beginCreation(event->scenePos());
+      imageBounds().contains(point) && shapeItemAt(event->scenePos()) == nullptr) {
+    beginCreation(point);
     event->accept();
     return;
   }
@@ -225,7 +287,8 @@ void ImageScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
   if (provisionalShape_ != nullptr &&
       provisionalShape_->model().creationKind() == CreationKind::Drag &&
       event->button() == Qt::LeftButton) {
-    provisionalShape_->updateCreation(creationOrigin_, imageBounds(), event->scenePos());
+    provisionalShape_->updateCreation(creationOrigin_, imageBounds(),
+                                      imagePosition(event->scenePos()));
     finishCreation(false);
     event->accept();
     return;
@@ -242,8 +305,8 @@ void ImageScene::beginCreation(const QPointF& position) {
   clearSelection();
   auto item = std::make_unique<ShapeItem>(Shape::make(creationType, QRectF{position, position}));
   item->setZValue(nextShapeZ_++);
+  item->setParentItem(contentItem_);
   provisionalShape_ = item.release();
-  addItem(provisionalShape_);
   provisionalShape_->setSelected(true);
   creationOrigin_ = position;
 }
@@ -280,6 +343,10 @@ void ImageScene::pushCommand(std::unique_ptr<QUndoCommand> command) {
   if (undoStack_ != nullptr) {
     undoStack_->push(command.release());
   }
+}
+
+void ImageScene::updateSceneRect() {
+  setSceneRect(contentItem_->mapRectToScene(imageBounds()).normalized());
 }
 
 } // namespace quickshot

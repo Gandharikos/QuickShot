@@ -41,6 +41,7 @@ public:
   [[nodiscard]] QString imagePathAt(qsizetype index) const;
   [[nodiscard]] QImage thumbnailAt(qsizetype index, const QSize& size) const;
   [[nodiscard]] qreal zoomFactor() const noexcept;
+  [[nodiscard]] qreal imageRotationDegrees() const noexcept;
   [[nodiscard]] QSize sizeHint() const override;
   [[nodiscard]] qsizetype shapeCount() const noexcept;
   [[nodiscard]] qsizetype shapeCountAt(qsizetype imageIndex) const noexcept;
@@ -68,6 +69,7 @@ signals:
   void imageThumbnailChanged(qsizetype index);
   void cursorImagePositionChanged(const QPointF& position);
   void cursorLeftImage();
+  void imageRotationChanged(qreal degrees);
 
 protected:
   void contextMenuEvent(QContextMenuEvent* event) override;

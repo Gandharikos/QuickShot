@@ -136,7 +136,11 @@ std::unique_ptr<ShapeItem> ShapeItem::clone() const {
   return item;
 }
 
-QPainterPath ShapeItem::imagePath() const { return mapToScene(shape()); }
+QPainterPath ShapeItem::imagePath() const {
+  // The parent content item may be rotated in the scene, but ROI geometry remains in the original
+  // image coordinate system until export applies the document's display transform once.
+  return mapToParent(shape());
+}
 
 ShapeItemGeometry ShapeItem::captureGeometry() const {
   return {.position = pos(), .shape = shape_->captureGeometry()};
@@ -197,17 +201,6 @@ void ShapeItem::finishCreation() {
   update();
 }
 
-void ShapeItem::applyImageTransform(const QTransform& transformation) {
-  prepareGeometryChange();
-  if (!pos().isNull()) {
-    shape_->moveBy(pos());
-    setPos({});
-  }
-  shape_->transform(transformation);
-  updateHandles();
-  update();
-}
-
 QVariant ShapeItem::itemChange(GraphicsItemChange change, const QVariant& value) {
   if (change == ItemSelectedHasChanged) {
     updateHandleVisibility();
@@ -215,8 +208,13 @@ QVariant ShapeItem::itemChange(GraphicsItemChange change, const QVariant& value)
   } else if (change == ItemPositionChange && scene() != nullptr) {
     const QPointF proposedPosition = value.toPointF();
     const QPointF delta = proposedPosition - pos();
-    const QRectF proposedBounds = sceneBoundingRect().translated(delta);
-    const QRectF limits = scene()->sceneRect();
+    const QRectF proposedBounds = imagePath().boundingRect().translated(delta);
+    const ImageScene* currentScene = imageScene();
+    Q_ASSERT(currentScene != nullptr);
+    if (currentScene == nullptr) {
+      return value;
+    }
+    const QRectF limits = currentScene->imageBounds();
     QPointF constrained = proposedPosition;
     if (proposedBounds.left() < limits.left()) {
       constrained.rx() += limits.left() - proposedBounds.left();
@@ -313,7 +311,12 @@ void ShapeItem::updateHandleInteraction(const QPointF& scenePosition) {
   prepareGeometryChange();
   if (handleInteraction_ == HandleInteraction::Resize) {
     const QPointF localPosition = mapFromScene(scenePosition);
-    const QRectF localLimits = mapRectFromScene(scene()->sceneRect());
+    const ImageScene* currentScene = imageScene();
+    Q_ASSERT(currentScene != nullptr);
+    if (currentScene == nullptr) {
+      return;
+    }
+    const QRectF localLimits = mapRectFromParent(currentScene->imageBounds());
     shape_->resize(*interactionStart_->shape, activeHandle, localPosition, localLimits);
   } else if (handleInteraction_ == HandleInteraction::Rotate) {
     const qreal angle = mouseAngle(rotationCenter_, scenePosition);

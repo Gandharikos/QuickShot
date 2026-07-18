@@ -18,6 +18,7 @@ class QUndoCommand;
 namespace quickshot {
 
 class ImageItem;
+class ImageContentItem;
 
 class ImageScene final : public QGraphicsScene {
   Q_OBJECT
@@ -30,6 +31,12 @@ public:
   [[nodiscard]] const QImage& image() const noexcept;
   void setImage(QImage image);
   [[nodiscard]] QRectF imageBounds() const noexcept;
+  [[nodiscard]] QPointF imagePosition(const QPointF& scenePosition) const;
+  [[nodiscard]] QPointF imageCenterInScene() const;
+  [[nodiscard]] QTransform displayTransform() const;
+  [[nodiscard]] QImage displayImage() const;
+  [[nodiscard]] qreal rotationDegrees() const noexcept;
+  void setRotationDegrees(qreal degrees);
   void setCreationMode(ShapeType type, bool enabled);
   void cancelCreation();
 
@@ -46,7 +53,6 @@ public:
                        const QString& text);
   void suppressNextContextMenu() noexcept;
   [[nodiscard]] bool consumeContextMenuSuppression() noexcept;
-  void applyImageTransform(const QTransform& transformation);
 
 signals:
   void shapeCollectionChanged();
@@ -60,8 +66,10 @@ private:
   void beginCreation(const QPointF& position);
   void finishCreation(bool suppressContextMenu);
   void pushCommand(std::unique_ptr<QUndoCommand> command);
+  void updateSceneRect();
 
   QImage image_;
+  ImageContentItem* contentItem_ = nullptr;
   ImageItem* imageItem_ = nullptr;
   QUndoStack* undoStack_ = nullptr;
   std::optional<ShapeType> creationType_;
